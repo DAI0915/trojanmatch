@@ -142,12 +142,15 @@ test.describe("P3 presenter demo sandbox", () => {
     await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Jordan Lee (synthetic persona)");
 
     // Re-lease from another browser invalidates this session on its next request.
+    // (The proxy may notice on a background request first, so the old browser can land on either page.)
     const second = await startDemo(browser, viewport);
     await page.goto("/spaces");
-    await expect(page).toHaveURL(/\/demo\?expired=1/);
-    await expect(page.getByText("Your demo session ended")).toBeVisible();
+    await expect(page).toHaveURL(/\/demo\?expired=1|\/sign-in/);
     const after = await page.request.get("/api/profile");
     expect(after.status()).toBe(401);
+    await page.goto("/demo");
+    await expect(page.getByRole("button", { name: "Start presenter demo" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toHaveCount(0);
 
     // End the demo cleanly from the second browser.
     await second.page.goto("/demo");

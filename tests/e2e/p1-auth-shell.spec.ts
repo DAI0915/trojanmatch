@@ -48,7 +48,8 @@ test.describe("P1 — auth & shell @smoke", () => {
     await signIn(page, email);
     await expect(page).toHaveURL(/\/spaces$/);
     await expect(page.getByRole("heading", { name: "Find your hackathon or course project" })).toBeVisible();
-    await expect(page.getByText("You haven't joined one yet")).toBeVisible();
+    // Works on a fresh DB (empty state) and on persistent environments (joined Spaces).
+    await expect(page.getByRole("heading", { name: "My hackathon Spaces" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Change Matching Space" })).toContainText("No Space selected");
     await page.screenshot({ path: `test-results/screens/spaces-${info.project.name}.png`, fullPage: true });
 

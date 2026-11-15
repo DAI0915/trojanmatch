@@ -73,9 +73,11 @@ test.describe("P2 acceptance: Spaces, joining, participation", () => {
     const dev1 = await signedInPage(browser, "dev1@trojanmatch.test", viewport);
     const dev2 = await signedInPage(browser, "dev2@trojanmatch.test", viewport);
 
-    // A. Search for TreeHacks 2027 → no results.
+    // A. Search for TreeHacks 2027 → no such Space. On a fresh DB this is the empty state;
+    //    on persistent environments similar earlier test Spaces may be listed, but never this one.
     await dev1.goto(`/spaces?type=hackathon&q=${encodeURIComponent(`${n.event} 2027`)}`);
-    await expect(dev1.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await expect(dev1.getByRole("link", { name: new RegExp(`^${escapeRe(n.event)} 2027`) })).toHaveCount(0);
+    if (!RUN_TAG) await expect(dev1.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
     await noHorizontalScroll(dev1);
     await dev1.screenshot({ path: shots("A-search-empty"), fullPage: true });
 
