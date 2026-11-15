@@ -1,0 +1,96 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const DEV1 = "dev1@trojanmatch.test";
+const PASSWORD = process.env.DEV_TEST_PASSWORD ?? "";
+
+async function signIn(page: Page, email = DEV1, password = PASSWORD) {
+  await page.goto("/sign-in");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+test.describe("P1 — auth & shell @smoke", () => {
+  test("landing renders value prop and CTAs, no horizontal scroll", async ({ page }, info) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Stop searching.");
+    await expect(page.getByRole("link", { name: "Find Your Team" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Try Demo Mode" })).toBeVisible();
+    await expect(page.getByText("not affiliated with or endorsed by USC")).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow).toBe(false);
+    await page.screenshot({ path: `test-results/screens/landing-${info.project.name}.png`, fullPage: true });
+  });
+
+  test("protected pages redirect to sign-in with a safe next param", async ({ page }) => {
+    await page.goto("/teams");
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fteams/);
+  });
+
+  test("protected API returns 401 JSON without a session", async ({ request }) => {
+    const res = await request.get("/api/profile");
+    expect(res.status()).toBe(401);
+    expect((await res.json()).error.code).toBe("NOT_AUTHENTICATED");
+  });
+
+  test("wrong password shows a generic error", async ({ page }) => {
+    await signIn(page, DEV1, "definitely-wrong-password");
+    await expect(page.locator("form [role=alert]")).toHaveText("Incorrect email or password.");
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+
+  test("confirmed dev account signs in, sees the shell, and signs out", async ({ page }, info) => {
+    test.skip(!PASSWORD, "DEV_TEST_PASSWORD not set");
+    await signIn(page);
+    await expect(page).toHaveURL(/\/spaces$/);
+    await expect(page.getByRole("heading", { name: "Find your hackathon or course project" })).toBeVisible();
+    await expect(page.getByText("You haven't joined a Space yet")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change Matching Space" })).toContainText("No Space selected");
+    await page.screenshot({ path: `test-results/screens/spaces-${info.project.name}.png`, fullPage: true });
+
+    // Navigation works (desktop sidebar or mobile sheet).
+    if (info.project.name === "mobile") {
+      await page.getByRole("button", { name: "Open navigation" }).click();
+    }
+    await page.getByRole("link", { name: "My Teams" }).click();
+    await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
+    await expect(page.getByText("Creating a Space never creates a team.")).toBeVisible();
+
+    // Own profile via API (session-derived identity).
+    const api = await page.request.get("/api/profile");
+    expect(api.status()).toBe(200);
+    const body = await api.json();
+    expect(body.profile.display_name).toBe("Dev Tester A");
+    expect(body.profile.scope).toBe("prod");
+    expect(JSON.stringify(body)).not.toContain(DEV1); // email is never in profile payloads
+
+    // Space switcher opens and offers "Find or create a Space".
+    if (info.project.name === "mobile") await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Change Matching Space" }).click();
+    await expect(page.getByRole("menuitem", { name: "Find or create a Space" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow).toBe(false);
+
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL("/");
+    await page.goto("/spaces");
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+
+  test("cross-origin sign-out POST is rejected (CSRF)", async ({ request }) => {
+    const res = await request.post("/auth/sign-out", { headers: { origin: "https://evil.example" } });
+    expect(res.status()).toBe(403);
+  });
+
+  test("sign-up page honours the server flag", async ({ page }) => {
+    await page.goto("/sign-up");
+    const enabled = process.env.PUBLIC_SIGNUP_ENABLED === "true";
+    if (enabled) {
+      await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+    } else {
+      await expect(page.getByText("Sign-up isn't open yet")).toBeVisible();
+    }
+  });
+});
