@@ -31,3 +31,21 @@ export function teamSizeLabel(min: number, max: number) {
 export function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** "in 47 h", "in 25 min", "expired" — coarse, for invitation expiry. */
+export function expiresIn(iso: string, now = Date.now()) {
+  const ms = new Date(iso).getTime() - now;
+  if (ms <= 0) return "expired";
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `in ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `in ${h} h` : `in ${Math.round(h / 24)} days`;
+}
+
+export function timeAgo(iso: string, now = Date.now()) {
+  const min = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+}

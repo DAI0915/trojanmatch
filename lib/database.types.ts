@@ -305,7 +305,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "check_space_duplicates":
+            "cancel_invitation":
+{ Args: { "p_invitation_id": string }; Returns: Json
+                           },
+"check_space_duplicates":
 { Args: { "p_payload": Json }; Returns: {
               "is_member": boolean,"match_kind": string,"participant_count": number,"requires_code": boolean,"slug": string,"space_id": string,"title": string,"type": Database["public"]['Enums']["space_type"],"visibility": Database["public"]['Enums']["space_visibility"]
             }[]
@@ -346,6 +349,12 @@ isOneToOne: false
 "demo_start_lease":
 { Args: { "p_minutes": number,"p_slot": number,"p_token_hash": string }; Returns: Json
                            },
+"finalize_team":
+{ Args: { "p_team_id": string }; Returns: Json
+                           },
+"find_teams":
+{ Args: { "p_filters"?: Json,"p_space_id": string }; Returns: Json
+                           },
 "get_invite_link":
 { Args: { "p_space_id": string }; Returns: Json
                            },
@@ -358,10 +367,25 @@ isOneToOne: false
 "join_space":
 { Args: { "p_code"?: string,"p_space_id": string }; Returns: Json
                            },
+"refresh_invitations":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
+"request_to_join":
+{ Args: { "p_message"?: string,"p_team_id": string }; Returns: Json
+                           },
+"respond_invitation":
+{ Args: { "p_accept": boolean,"p_invitation_id": string,"p_leave_solo_draft"?: boolean }; Returns: Json
+                           },
 "search_spaces":
 { Args: { "p_limit"?: number,"p_query"?: string,"p_type"?: Database["public"]['Enums']["space_type"] }; Returns: {
               "allowed_sections": (string)[],"assignment_name": string,"course_code": string,"created_at": string,"edition_year": number,"ends_at": string,"event_timezone": string,"format": Database["public"]['Enums']["hackathon_format"],"id": string,"is_member": boolean,"join_policy": Database["public"]['Enums']["join_policy"],"max_team_size": number,"min_team_size": number,"organizer": string,"participant_count": number,"slug": string,"starts_at": string,"status": Database["public"]['Enums']["space_status"],"team_size_source": Database["public"]['Enums']["team_size_source"],"term": string,"title": string,"type": Database["public"]['Enums']["space_type"],"university": string,"visibility": Database["public"]['Enums']["space_visibility"]
             }[]
+                           },
+"send_invitations":
+{ Args: { "p_message"?: string,"p_team_id": string,"p_user_ids": (string)[] }; Returns: Json
+                           },
+"start_team_with_invitations":
+{ Args: { "p_message"?: string,"p_space_id": string,"p_team": Json,"p_user_ids": (string)[] }; Returns: Json
                            },
 "update_team":
 { Args: { "p_payload": Json,"p_team_id": string }; Returns: Json

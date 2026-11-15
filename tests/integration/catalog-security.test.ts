@@ -13,15 +13,23 @@ const ANON_EXECUTE_ALLOWLIST: string[] = ["public.get_space", "public.search_spa
 // Functions authenticated may execute. Private helpers are executable (RLS needs
 // them) but unreachable over HTTP because `private` is not an exposed schema.
 const AUTHENTICATED_EXECUTE_ALLOWLIST = [
+  "public.cancel_invitation",
   "public.check_space_duplicates",
   "public.create_space",
   "public.create_team",
   "public.demo_lease_valid",
+  "public.finalize_team",
+  "public.find_teams",
   "public.get_invite_link",
   "public.get_match_pool",
   "public.get_space",
   "public.join_space",
+  "public.refresh_invitations",
+  "public.request_to_join",
+  "public.respond_invitation",
   "public.search_spaces",
+  "public.send_invitations",
+  "public.start_team_with_invitations",
   "public.update_team",
   "private.can_recruit",
   "private.current_scope",

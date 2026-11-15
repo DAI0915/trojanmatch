@@ -16,6 +16,9 @@ export const ERROR_CODES = [
   "DUPLICATE_PENDING",
   "DUPLICATE_SPACE",
   "INVITE_NO_LONGER_VALID",
+  "INVITE_EXPIRED",
+  "OWN_DRAFT_TEAM",
+  "TRY_AGAIN",
   "INVALID_CODE",
   "RATE_LIMITED",
   "NO_MATCH",
@@ -69,5 +72,7 @@ export function fromDbError(err: { message?: string; code?: string } | null | un
     return new ApiError(match[1] as ErrorCode, match[2] || match[1]);
   }
   if (err?.code === "42501") return new ApiError("NOT_PARTICIPANT", "Not allowed.");
+  // Serialization failure / deadlock: another change to the same team won the race.
+  if (err?.code === "40P01" || err?.code === "40001") return new ApiError("TRY_AGAIN", "Someone else changed this team at the same moment. Please try again.");
   return new ApiError("INTERNAL", "Something went wrong.");
 }
