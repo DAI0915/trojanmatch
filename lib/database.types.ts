@@ -313,6 +313,9 @@ isOneToOne: false
 "create_space":
 { Args: { "p_payload": Json }; Returns: Json
                            },
+"create_team":
+{ Args: { "p_payload": Json,"p_space_id": string }; Returns: Json
+                           },
 "demo_check_lease":
 { Args: { "p_slot": number,"p_token_hash": string }; Returns: Json
                            },
@@ -356,6 +359,9 @@ isOneToOne: false
 { Args: { "p_limit"?: number,"p_query"?: string,"p_type"?: Database["public"]['Enums']["space_type"] }; Returns: {
               "allowed_sections": (string)[],"assignment_name": string,"course_code": string,"created_at": string,"edition_year": number,"ends_at": string,"event_timezone": string,"format": Database["public"]['Enums']["hackathon_format"],"id": string,"is_member": boolean,"join_policy": Database["public"]['Enums']["join_policy"],"max_team_size": number,"min_team_size": number,"organizer": string,"participant_count": number,"slug": string,"starts_at": string,"status": Database["public"]['Enums']["space_status"],"team_size_source": Database["public"]['Enums']["team_size_source"],"term": string,"title": string,"type": Database["public"]['Enums']["space_type"],"university": string,"visibility": Database["public"]['Enums']["space_visibility"]
             }[]
+                           },
+"update_team":
+{ Args: { "p_payload": Json,"p_team_id": string }; Returns: Json
                            }
           }
           Enums: {

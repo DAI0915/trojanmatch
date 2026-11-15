@@ -81,8 +81,8 @@ async function main() {
   if (!process.argv.includes("--no-reset")) {
     const { data, error } = await admin.rpc("demo_reset_slot", { p_slot: slot, p_fixture: demoFixture() });
     if (error) throw new Error(`reset: ${error.message}`);
-    const r = data as { personas: number; participations: number; spaces: Record<string, unknown> };
-    console.log(`fixture loaded: ${r.personas} personas, ${Object.keys(r.spaces).length} spaces, ${r.participations} participations`);
+    const r = data as { personas: number; participations: number; teams: number; spaces: Record<string, unknown> };
+    console.log(`fixture loaded: ${r.personas} personas, ${Object.keys(r.spaces).length} spaces, ${r.participations} participations, ${r.teams} teams`);
   }
 }
 

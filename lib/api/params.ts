@@ -8,3 +8,9 @@ export function spaceIdParam(params: { id: string }): string {
   if (!r.success) throw new ApiError("NOT_FOUND", "Space not found.");
   return r.data;
 }
+
+export function teamIdParam(params: { id: string }): string {
+  const r = uuid.safeParse(params.id);
+  if (!r.success) throw new ApiError("NOT_FOUND", "Team not found.");
+  return r.data;
+}

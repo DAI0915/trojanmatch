@@ -15,11 +15,13 @@ const ANON_EXECUTE_ALLOWLIST: string[] = ["public.get_space", "public.search_spa
 const AUTHENTICATED_EXECUTE_ALLOWLIST = [
   "public.check_space_duplicates",
   "public.create_space",
+  "public.create_team",
   "public.demo_lease_valid",
   "public.get_invite_link",
   "public.get_space",
   "public.join_space",
   "public.search_spaces",
+  "public.update_team",
   "private.can_recruit",
   "private.current_scope",
   "private.is_active_member",

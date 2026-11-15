@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Circle, Settings2, Sparkles, UserRound, Users } from "lucide-react";
+import { CheckCircle2, Circle, Plus, Settings2, Sparkles, UserRound, Users, UsersRound } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { InviteLinkCard } from "@/components/space/invite-link-card";
 import { SpaceFacts, SpaceHeader } from "@/components/space/space-header";
 import { getSpace } from "@/lib/spaces";
+import { teamsInSpace } from "@/lib/teams";
+import { TeamCard } from "@/components/team/team-card";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { goalLabel, roleLabel } from "@/lib/taxonomy";
 import { plural } from "@/lib/format";
@@ -26,6 +28,7 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
   ]);
   if (!part) notFound();
 
+  const { myTeam, recruiting } = await teamsInSpace(space.id, user!.id);
   const count = Number(space.participant_count);
   const alone = count <= 1;
 
@@ -58,11 +61,36 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
                 {space.recruiting_team_count > 0 ? ` · ${plural(Number(space.recruiting_team_count), "team")} recruiting` : ""}
               </p>
               <p className="mt-3 text-xs text-muted-foreground">
-                Each student chooses whether their profile is visible here. Team tools (Find a Team, Grow My Team and
-                Smart Team Formation) are not available yet.
+                Each student chooses whether their profile is visible here. Smart Team Formation and member
+                recommendations are not available yet.
               </p>
             </section>
           )}
+
+          <section className="rounded-xl border bg-card p-5" aria-labelledby="team-heading">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="team-heading" className="flex items-center gap-2 font-medium">
+                <UsersRound className="size-4 text-primary" aria-hidden /> Your team
+              </h2>
+              <Link href={`/s/${space.slug}/teams`} className="text-sm text-primary underline-offset-4 hover:underline">
+                All teams{recruiting.length ? ` (${recruiting.length} recruiting)` : ""}
+              </Link>
+            </div>
+            {myTeam ? (
+              <div className="mt-3 sm:max-w-md">
+                <TeamCard team={myTeam} href={`/s/${space.slug}/teams/${myTeam.id}`} />
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">You&apos;re not on a team in this Space yet.</p>
+                {space.status === "open" && (
+                  <Link href={`/s/${space.slug}/teams/new`} className={buttonVariants({ size: "sm" })}>
+                    <Plus data-icon="inline-start" aria-hidden /> Create a team
+                  </Link>
+                )}
+              </div>
+            )}
+          </section>
 
           <InviteLinkCard spaceId={space.id} emphasize={alone} />
           <SpaceFacts space={space} />

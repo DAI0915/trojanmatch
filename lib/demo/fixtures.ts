@@ -231,6 +231,89 @@ const CSCI567 = [
   "julia", "rosa", "will",
 ];
 
+// Synthetic recruiting teams (P4-A). None include the four switchable personas,
+// so the live TreeHacks 2027 flow is unaffected. Every team satisfies the DB
+// constraints: members are participants, target within the Space bounds,
+// capacity respected, active teams meet the Space minimum.
+export const DEMO_TEAMS = [
+  {
+    space: "ai_usc_2026",
+    name: "Prompt Pilots",
+    description: "An LLM study buddy that turns lecture slides into practice questions. (Synthetic demo team.)",
+    owner: "ethan",
+    members: ["grace"],
+    status: "active",
+    recruiting: true,
+    target_size: 4,
+    requirements: {
+      must_roles: ["frontend"],
+      preferred_roles: ["design"],
+      skills: ["react", "figma"],
+      topics: ["llm-agents", "education"],
+      goal: "build",
+      min_shared_hours: 6,
+      note: "Backend + agents are covered; we need someone to own the UI.",
+    },
+  },
+  {
+    space: "ai_usc_2026",
+    name: "GreenGrid",
+    description: "Forecasting campus energy use from open climate data. (Synthetic demo team.)",
+    owner: "diego",
+    members: ["aisha"],
+    status: "active",
+    recruiting: true,
+    target_size: 3,
+    requirements: {
+      must_roles: ["frontend"],
+      preferred_roles: ["pm_pitch"],
+      skills: ["react", "typescript"],
+      topics: ["climate", "data-viz"],
+      goal: "build",
+      min_shared_hours: 4,
+      note: "Looking for a frontend dev who enjoys charts.",
+    },
+  },
+  {
+    space: "ai_usc_2026",
+    name: "CareCompanion",
+    description: "Medication reminders with computer vision pill checks. (Synthetic demo team.)",
+    owner: "amara",
+    members: [],
+    status: "draft",
+    recruiting: true,
+    target_size: 3,
+    requirements: {
+      must_roles: ["backend", "frontend"],
+      skills: ["python", "react"],
+      topics: ["health", "accessibility"],
+      goal: "competitive",
+      min_shared_hours: 8,
+    },
+  },
+  {
+    space: "csci567_fall2026",
+    name: "Gradient Descenders",
+    description: "Final project on fair risk prediction. (Synthetic demo team.)",
+    owner: "sofia",
+    members: [],
+    status: "draft",
+    recruiting: true,
+    target_size: 4,
+    requirements: {
+      must_roles: ["ai_ml"],
+      preferred_roles: ["writing"],
+      skills: ["python", "pytorch"],
+      topics: ["health"],
+      goal: "aim_a",
+      min_shared_hours: 6,
+      note: "Weekly sync on Tuesdays.",
+    },
+  },
+] as const;
+
+const ON_A_TEAM = new Set<string>(DEMO_TEAMS.flatMap((t) => [`${t.space}:${t.owner}`, ...t.members.map((m) => `${t.space}:${m}`)]));
+
 function part(space: string, key: string, type: "hackathon" | "course") {
   const p = byKey.get(key);
   if (!p) throw new Error(`unknown persona ${key}`);
@@ -242,6 +325,8 @@ function part(space: string, key: string, type: "hackathon" | "course") {
     topics: p.interests.slice(0, 3),
     ...ALL_ON,
     ...(OPT_OUT[key] ?? {}),
+    // Already on a team in this Space → not looking for one.
+    ...(ON_A_TEAM.has(`${space}:${key}`) ? { looking_for_team: false } : {}),
     notes: null,
   };
 }
@@ -254,7 +339,9 @@ export const DEMO_PARTICIPATIONS = [
 
 /** Payload for public.demo_reset_slot() (plain JSON, exactly as sent over the wire). */
 export function demoFixture(): Json {
-  return JSON.parse(JSON.stringify({ personas: DEMO_PERSONAS, spaces: DEMO_SPACES, participations: DEMO_PARTICIPATIONS })) as Json;
+  return JSON.parse(
+    JSON.stringify({ personas: DEMO_PERSONAS, spaces: DEMO_SPACES, participations: DEMO_PARTICIPATIONS, teams: DEMO_TEAMS }),
+  ) as Json;
 }
 
 export const DEMO_SPACE_COUNTS = {

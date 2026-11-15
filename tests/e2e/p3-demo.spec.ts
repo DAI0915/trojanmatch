@@ -66,7 +66,7 @@ test.describe("P3 presenter demo sandbox", () => {
     // The seeded hackathon shows real counts, all labeled synthetic.
     await page.goto("/spaces?type=hackathon&q=AI%40USC");
     await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
-    await expect(page.getByTestId("participant-count")).toHaveText("32 participants in this Space (32 synthetic)");
+    await expect(page.getByTestId("participant-count")).toHaveText("32 participants in this Space (32 synthetic) · 3 teams recruiting");
     await expect(page.getByText("Demo sandbox · synthetic").first()).toBeVisible();
 
     // Scope isolation: no TreeHacks 2027 yet in the sandbox (even if prod has one), and prod test Spaces are invisible.
@@ -179,6 +179,54 @@ test.describe("P3 presenter demo sandbox", () => {
     // The sandbox is back to its starting state.
     await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
     await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
+  test("H: demo sandbox has valid recruiting teams; presenter teams vanish on reset", async ({ browser }, info) => {
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const { context, page } = await startDemo(browser, viewport);
+    const headers = { origin: new URL(page.url()).origin };
+
+    // Seeded synthetic teams in AI@USC (Jordan is not on any of them).
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const slug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.goto(`/s/${slug}/teams`);
+    await expect(page.getByRole("heading", { name: "You're not on a team in this Space" })).toBeVisible();
+    for (const name of ["Prompt Pilots", "GreenGrid", "CareCompanion"]) {
+      await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+    }
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: `test-results/screens/p4a-demo-teams-${info.project.name}.png`, fullPage: true });
+    await page.getByRole("link", { name: /Prompt Pilots/ }).click();
+    await expect(page.getByTestId("team-capacity")).toHaveText("2 of 4 · 2 open positions");
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    await expect(page.getByText("Synthetic").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Edit team" })).toHaveCount(0);
+
+    // Jordan creates a team in AI@USC via the API (same RPC as the form).
+    const spaces = (await (await page.request.get("/api/spaces?q=")).json()).spaces as { id: string; slug: string }[];
+    const spaceId = spaces.find((s) => s.slug === slug)!.id;
+    const created = await page.request.post(`/api/spaces/${spaceId}/teams`, {
+      headers,
+      data: { name: "Jordan Demo Team", description: "", open_positions: 2, recruiting: true, requirements: { must_roles: ["design"] } },
+    });
+    expect(created.status()).toBe(201);
+    await page.goto(`/s/${slug}/teams`);
+    await expect(page.getByRole("link", { name: /Jordan Demo Team/ })).toBeVisible();
+
+    // Reset restores exactly the seeded teams.
+    const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
+    expect(reset.status()).toBe(200);
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const newSlug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.goto(`/s/${newSlug}/teams`);
+    await expect(page.getByRole("link", { name: /Jordan Demo Team/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Prompt Pilots/ })).toBeVisible();
     await page.request.post("/api/demo/end", { headers, data: {} });
     await context.close();
   });
