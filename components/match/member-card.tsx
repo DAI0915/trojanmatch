@@ -1,4 +1,4 @@
-import { UserRound } from "lucide-react";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Badge } from "@/components/ui/badge";
 import type { MemberView } from "@/lib/matching/view";
 import { cn } from "@/lib/utils";
@@ -18,9 +18,7 @@ export function MemberCard({ member: m, actions, highlight }: { member: MemberVi
       className={cn("flex h-full flex-col gap-3 rounded-xl border bg-card p-4", m.kind === "candidate" && "border-dashed", highlight && "ring-2 ring-primary/40")}
     >
       <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
-          <UserRound className="size-4" aria-hidden />
-        </span>
+        <PersonAvatar name={m.name} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-medium" data-testid="member-name">{m.name}</h3>
           <p className="text-sm text-primary">{m.role ?? m.roles[0] ?? "Role not set"}</p>

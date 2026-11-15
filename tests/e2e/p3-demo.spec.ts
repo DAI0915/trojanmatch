@@ -395,6 +395,7 @@ test.describe("P3 presenter demo sandbox", () => {
     await dialog.getByLabel("Team name").fill("Trojan Builders");
     await dialog.getByLabel(/Message/).fill("Let's build something for TreeHacks!");
     await noHorizontalScroll(page);
+    await expect(dialog).toHaveCSS("opacity", "1");
     await page.screenshot({ path: shot("send"), fullPage: false });
     await dialog.getByRole("button", { name: "Send invitations" }).click();
     await expect(page).toHaveURL(new RegExp(`/s/${slug}/teams/[0-9a-f-]{36}$`), { timeout: 20_000 });

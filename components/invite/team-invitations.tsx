@@ -1,5 +1,6 @@
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import Link from "next/link";
-import { CheckCircle2, CircleDashed, CircleDot, Clock, Sparkles, UserRound } from "lucide-react";
+import { CheckCircle2, CircleDashed, CircleDot, Clock, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { REASON_LABEL, effectiveStatus, type InvitationView } from "@/lib/invitations";
@@ -63,9 +64,7 @@ export function StatusTimeline({
 function Person({ i }: { i: InvitationView }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
-        <UserRound className="size-3.5" aria-hidden />
-      </span>
+      <PersonAvatar name={i.person.name} size="sm" />
       <span className="min-w-0 truncate font-medium">{i.person.name ?? "Student (profile not shared)"}</span>
       {i.person.synthetic && <Badge variant="outline" className="h-4 px-1 text-[10px]">Synthetic</Badge>}
     </span>

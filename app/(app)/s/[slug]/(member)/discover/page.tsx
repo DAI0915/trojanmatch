@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Circle, Plus, Settings2, Sparkles, UserRound, Users, UsersRound } from "lucide-react";
+import { ArrowRight, CheckCircle2, Circle, Plus, Search, Settings2, Sparkles, UserPlus, UserRound, Users, UsersRound } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { InviteLinkCard } from "@/components/space/invite-link-card";
 import { SpaceFacts, SpaceHeader } from "@/components/space/space-header";
@@ -68,12 +69,25 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
 
           <nav aria-label="Find your team" className="grid gap-3 sm:grid-cols-3">
             {[
-              { href: `/s/${space.slug}/find`, title: "Find a Team", body: "Recruiting teams ranked by fit with you. Request to join." },
-              { href: `/s/${space.slug}/grow`, title: "Grow My Team", body: "See your team's gaps and who could fill them." },
-              { href: `/s/${space.slug}/smart`, title: "Smart Team Formation", body: "Let AI propose a complete, balanced team." },
+              { href: `/s/${space.slug}/smart`, icon: Sparkles, title: "Smart Team Formation", body: "Let AI propose a complete, balanced team.", featured: true },
+              { href: `/s/${space.slug}/find`, icon: Search, title: "Find a Team", body: "Recruiting teams ranked by fit with you. Request to join." },
+              { href: `/s/${space.slug}/grow`, icon: UserPlus, title: "Grow My Team", body: "See your team's gaps and who could fill them." },
             ].map((c) => (
-              <Link key={c.href} href={c.href} className="rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
-                <span className="block font-medium">{c.title}</span>
+              <Link
+                key={c.href}
+                href={c.href}
+                className={cn(
+                  "group flex flex-col rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring",
+                  c.featured && "border-primary/40 bg-primary/5",
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <c.icon className="size-4" aria-hidden />
+                  </span>
+                  <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
+                </span>
+                <span className="mt-3 block font-medium">{c.title}</span>
                 <span className="mt-1 block text-sm text-muted-foreground">{c.body}</span>
               </Link>
             ))}

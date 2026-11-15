@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, MessageSquare, RotateCw, Send, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { createClient } from "@/lib/supabase/client";
@@ -156,30 +157,44 @@ export function TeamChat({
           </div>
         ) : (
           <ol className="flex flex-col gap-3">
-            {messages.map((m) => {
+            {messages.map((m, idx) => {
               const mine = m.author_id === meId;
+              const author = mine ? "You" : (names.get(m.author_id) ?? "Former member");
+              const prev = messages[idx - 1];
+              // Consecutive messages from the same person within 5 minutes share one header.
+              const grouped =
+                !!prev && prev.author_id === m.author_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
               return (
-                <li key={m.id} className={cn("flex flex-col", mine ? "items-end" : "items-start")} data-testid="chat-message" data-mine={mine}>
-                  <span className="mb-0.5 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground" data-testid="chat-author">{mine ? "You" : (names.get(m.author_id) ?? "Former member")}</span>
-                    {" · "}
-                    <time dateTime={m.created_at}>{timeFmt.format(new Date(m.created_at))}</time>
-                  </span>
-                  <p
-                    data-testid="chat-body"
-                    className={cn(
-                      "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm [overflow-wrap:anywhere]",
-                      mine ? "bg-primary text-primary-foreground" : "bg-muted",
-                    )}
-                  >
-                    {m.body}
-                  </p>
+                <li
+                  key={m.id}
+                  className={cn("flex gap-2", mine ? "flex-row-reverse" : "flex-row", grouped && "-mt-2")}
+                  data-testid="chat-message"
+                  data-mine={mine}
+                >
+                  {!mine && (grouped ? <span className="w-7 shrink-0" aria-hidden /> : <PersonAvatar name={names.get(m.author_id)} size="sm" className="mt-4" />)}
+                  <div className={cn("flex min-w-0 max-w-[85%] flex-col", mine ? "items-end" : "items-start")}>
+                    <span className={cn("mb-0.5 text-xs text-muted-foreground", grouped && "sr-only")}>
+                      <span className="font-medium text-foreground" data-testid="chat-author">{author}</span>
+                      {" · "}
+                      <time dateTime={m.created_at}>{timeFmt.format(new Date(m.created_at))}</time>
+                    </span>
+                    <p
+                      data-testid="chat-body"
+                      title={timeFmt.format(new Date(m.created_at))}
+                      className={cn(
+                        "whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm [overflow-wrap:anywhere]",
+                        mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted",
+                      )}
+                    >
+                      {m.body}
+                    </p>
+                  </div>
                 </li>
               );
             })}
             {pending.map((p) => (
               <li key={p.client_id} className="flex flex-col items-end" data-testid="chat-pending" data-state={p.state}>
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary/60 px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
+                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary/60 px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
                 {p.state === "sending" ? (
                   <span className="mt-0.5 text-xs text-muted-foreground">Sending…</span>
                 ) : (
@@ -218,9 +233,11 @@ export function TeamChat({
                 submit();
               }
             }}
-            placeholder="Message your team (Enter to send, Shift+Enter for a new line)"
+            placeholder="Message your team…"
+            aria-describedby="chat-hint"
             className="max-h-40"
           />
+          <p id="chat-hint" className="sr-only">Enter sends. Shift+Enter adds a new line.</p>
           {draft.length > MAX - 200 && <p className="mt-1 text-right text-xs text-muted-foreground">{draft.length}/{MAX}</p>}
         </div>
         <Button type="submit" disabled={!draft.trim()} aria-label="Send message">

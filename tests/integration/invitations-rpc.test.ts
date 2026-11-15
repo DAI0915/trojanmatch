@@ -433,7 +433,10 @@ describe("finalize_team", () => {
       rpc(U.o2, "finalize_team", { p_team_id: t2 }),
       respond("b", await inviteId(t2, "b"), true),
     ]);
-    expect(fin.error).toBeNull();
+    // Exactly one side may lose: if the accept wins, the team auto-activates
+    // (3 accepted, nothing pending) and finalize correctly refuses.
+    expect(!!fin.error && !!acc.error).toBe(false);
+    if (fin.error) expect(code(fin)).toBe("INVALID_INPUT");
     const row = await teamRow(t2);
     expect(row.status).toBe("active");
     expect(row.pending).toBe(0);

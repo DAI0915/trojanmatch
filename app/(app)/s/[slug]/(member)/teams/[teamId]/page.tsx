@@ -1,6 +1,7 @@
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Crown, Inbox, MessagesSquare, Pencil, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Crown, Inbox, MessagesSquare, Pencil, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { CancelInvitationButton, FinalizeTeamButton, RequestToJoinButton } from "@/components/invite/invitation-actions";
@@ -88,6 +89,14 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
           )}
         </section>
       )}
+      {isMember && team.status === "active" && (
+        <p className="mb-6 flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 p-4 text-sm" data-testid="team-active-callout">
+          <MessagesSquare className="size-4 shrink-0 text-primary" aria-hidden />
+          <span>
+            <span className="font-medium">Your team is active.</span> Open the workspace to chat and generate an AI Kickoff.
+          </span>
+        </p>
+      )}
       {!isMember && myTeam && team.recruiting && (
         <p className="mb-6 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
           You&apos;re already on “{myTeam.name}” in this Space. You can be on one team per Space.
@@ -126,9 +135,7 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
             <ul className="mt-3 flex flex-col gap-2" data-testid="member-list">
               {members.map((m) => (
                 <li key={m.user_id} className="flex items-center gap-2 text-sm">
-                  <span className="flex size-7 items-center justify-center rounded-full bg-muted">
-                    <UserRound className="size-3.5" aria-hidden />
-                  </span>
+                  <PersonAvatar name={m.name} size="sm" />
                   <span className="min-w-0 truncate">{m.name ?? "Member (profile not shared with you)"}</span>
                   {m.synthetic && <Badge variant="outline" className="h-4 px-1 text-[10px]">Synthetic</Badge>}
                   {m.role === "owner" && (

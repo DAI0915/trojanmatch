@@ -1,6 +1,7 @@
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Crown, Lock, UserRound } from "lucide-react";
+import { ArrowLeft, Crown, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { TeamStatusBadge } from "@/components/team/team-badges";
@@ -65,9 +66,7 @@ export default async function WorkspacePage({ params }: PageProps<"/s/[slug]/tea
               {w.members.map((m) => (
                 <li key={m.id} className="text-sm">
                   <span className="flex items-center gap-2">
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
-                      <UserRound className="size-3.5" aria-hidden />
-                    </span>
+                    <PersonAvatar name={m.name} size="sm" />
                     <span className="min-w-0 truncate font-medium">{m.name}{m.id === user!.id ? " (you)" : ""}</span>
                     {m.owner && <Crown className="size-3 shrink-0 text-muted-foreground" aria-label="Owner" />}
                   </span>
