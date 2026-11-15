@@ -57,7 +57,20 @@ export function DemoControls({
                   type="button"
                   disabled={current || !!busy}
                   aria-pressed={current}
-                  onClick={() => run(`switch-${p.key}`, () => apiFetch("/api/demo/switch", { method: "POST", json: { persona: p.key } }), `Now acting as ${p.name} (synthetic).`)}
+                  onClick={async () => {
+                    setBusy(`switch-${p.key}`);
+                    try {
+                      await apiFetch("/api/demo/switch", { method: "POST", json: { persona: p.key } });
+                      // Full navigation: no stale client cache or in-flight prefetch from the previous persona.
+                      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload is required to drop the previous persona session state (avoids a cookie race)
+                      window.location.assign("/spaces");
+                    } catch (err) {
+                      const e = err as ApiClientError;
+                      toast.error(e.message);
+                      setBusy(null);
+                      if (e.code === "DEMO_LEASE_INVALID") router.push("/demo?expired=1");
+                    }
+                  }}
                   className={cn(
                     "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-default",
                     current ? "border-primary bg-primary/5" : "hover:bg-muted",
@@ -146,8 +159,8 @@ export function DemoControls({
             onClick={async () => {
               setBusy("end");
               await apiFetch("/api/demo/end", { method: "POST", json: {} }).catch(() => undefined);
-              router.push("/demo");
-              router.refresh();
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload is required to drop the previous persona session state (avoids a cookie race)
+              window.location.assign("/demo");
             }}
           >
             <LogOut data-icon="inline-start" aria-hidden /> End demo

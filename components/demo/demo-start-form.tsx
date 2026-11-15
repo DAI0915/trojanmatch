@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { KeyRound, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/forms/field";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 
 export function DemoStartForm({ signedInAsReal }: { signedInAsReal: boolean }) {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -23,8 +21,9 @@ export function DemoStartForm({ signedInAsReal }: { signedInAsReal: boolean }) {
     setError(null);
     try {
       await apiFetch("/api/demo/start", { method: "POST", json: { code } });
-      router.push("/spaces");
-      router.refresh();
+      // Full navigation so no request from the previous session can race the new cookies.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload is required to drop the previous persona session state (avoids a cookie race)
+      window.location.assign("/spaces");
     } catch (err) {
       setError((err as ApiClientError).message);
       setPending(false);

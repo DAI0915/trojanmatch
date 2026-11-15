@@ -67,10 +67,16 @@ export async function clearLeaseCookie() {
 /**
  * Signs the browser in as an allowlisted persona using supported Auth APIs.
  * The email is derived from the persona key; the password is derived server-side.
+ *
+ * We deliberately do NOT revoke the previous session first: in-flight requests
+ * (e.g. Next.js prefetches) still carrying the old cookies would then fail auth
+ * and their responses would clear the NEW session cookies (a race seen in
+ * production). signInWithPassword replaces this browser's cookies; the previous
+ * synthetic session is never used again and expires with its JWT, and every demo
+ * request is still gated by the lease.
  */
 export async function signInAsPersona(cfg: Cfg, key: string) {
   const supabase = await createClient();
-  await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
   const email = personaEmail(key, PRESENTER_SLOT);
   const { error } = await supabase.auth.signInWithPassword({ email, password: personaPassword(cfg.DEMO_PERSONA_SECRET, email) });
   if (error) {

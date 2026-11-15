@@ -112,7 +112,7 @@ test.describe("P3 presenter demo sandbox", () => {
     // Persona switching: Maya (who was simulated into TreeHacks 2027 first).
     await page.goto("/demo");
     await page.getByRole("button", { name: /^M Maya/ }).click();
-    await expect(page.getByText("Now acting as Maya (synthetic).")).toBeVisible();
+    await expect(page).toHaveURL(/\/spaces$/);
     await page.goto("/spaces?type=hackathon");
     await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Maya Chen (synthetic persona)");
     await expect(page.getByRole("link", { name: /TreeHacks 2027/ })).toBeVisible();
@@ -138,7 +138,8 @@ test.describe("P3 presenter demo sandbox", () => {
     // Switch back to Jordan via the controls.
     await page.goto("/demo");
     await page.getByRole("button", { name: /^J Jordan/ }).click();
-    await expect(page.getByText("Now acting as Jordan (synthetic).")).toBeVisible();
+    await expect(page).toHaveURL(/\/spaces$/);
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Jordan Lee (synthetic persona)");
 
     // Re-lease from another browser invalidates this session on its next request.
     const second = await startDemo(browser, viewport);

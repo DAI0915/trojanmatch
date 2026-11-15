@@ -40,9 +40,9 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:py-10">
       <div className="flex items-center justify-between gap-4">
-        <Logo href={isDemoUser ? "/spaces" : "/"} />
+        <Logo href={isDemoUser ? "/spaces" : "/"} prefetch={false} />
         {isDemoUser && leaseValid && (
-          <Link href="/spaces" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link href="/spaces" prefetch={false} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Back to app
           </Link>
         )}
