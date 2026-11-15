@@ -20,7 +20,7 @@ select 'authenticated_executable_NOT_in_allowlist', coalesce(string_agg(name, ',
   from own where has_function_privilege('authenticated', oid, 'EXECUTE')
    and name not in ('private.can_recruit','private.current_scope','private.is_active_member','private.is_participant',
                     'private.participation_visible','private.profile_visible','private.team_is_active','private.team_visible','private.valid_hours',
-                    'public.check_space_duplicates','public.create_space','public.create_team','public.update_team','public.demo_lease_valid','public.get_invite_link','public.get_match_pool','public.get_space','public.join_space','public.search_spaces')
+                    'public.check_space_duplicates','public.create_space','public.create_team','public.update_team','public.demo_lease_valid','public.get_invite_link','public.get_match_pool','public.get_space','public.join_space','public.search_spaces','public.send_invitations','public.start_team_with_invitations','public.request_to_join','public.respond_invitation','public.cancel_invitation','public.finalize_team','public.refresh_invitations','public.find_teams')
 union all
 select 'tables_without_rls', coalesce(string_agg(n.nspname||'.'||c.relname, ','), '')
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
