@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { demoAdminClient } from "./admin";
 import { demoConfig } from "./config";
 import { personaPassword, sha256Hex } from "./crypto";
+import { demoFixture } from "./fixtures";
 import { LEASE_COOKIE, PRESENTER_SLOT, formatLeaseCookie, parseLeaseCookie, personaEmail } from "./personas";
 
 type Cfg = NonNullable<ReturnType<typeof demoConfig>>;
@@ -94,4 +95,24 @@ export async function clientSubject(cfg: Cfg) {
 
 export function ok(body: unknown, init?: ResponseInit) {
   return NextResponse.json(body, { ...init, headers: { "cache-control": "no-store", ...(init?.headers ?? {}) } });
+}
+
+/**
+ * Resets the presenter sandbox to the synthetic fixture and clears the
+ * Space-creation rate limits of THIS sandbox's synthetic personas (so repeated
+ * rehearsals can't exhaust them). Callers must have verified the presenter lease
+ * (reset) or presenter code (start) first. Never touches production users.
+ */
+export async function resetSandbox(admin: Admin) {
+  const { data, error } = await admin.rpc("demo_reset_slot", { p_slot: PRESENTER_SLOT, p_fixture: demoFixture() });
+  if (error) {
+    console.error("[demo] reset failed", error.message);
+    throw new ApiError("INTERNAL", "Demo data could not be reset.");
+  }
+  const { data: cleared, error: clearErr } = await admin.rpc("demo_clear_create_limits", { p_slot: PRESENTER_SLOT });
+  if (clearErr) {
+    console.error("[demo] clearing demo rate limits failed", clearErr.message);
+    throw new ApiError("INTERNAL", "Demo data could not be reset.");
+  }
+  return { ...(data as { personas: number; participations: number }), cleared_create_limits: cleared as number };
 }

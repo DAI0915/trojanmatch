@@ -139,9 +139,14 @@ describe("create_space", () => {
     // Search treats an explicit year as a hard filter; no year finds both editions.
     const ids = async (q: string) =>
       ((await rpc<Array<{ id: string }>>(null, "search_spaces", { p_type: "hackathon", p_query: q })).data ?? []).map((r) => r.id);
-    expect(await ids(`TreeHacks ${TAG} 2027`)).toEqual([created.space_id]);
-    expect(await ids(`TreeHacks ${TAG} 2026`)).toEqual([data.space_id]);
-    expect((await ids(`TreeHacks ${TAG}`)).sort()).toEqual([created.space_id, data.space_id].sort());
+    // (Other similar Spaces may exist in a persistent DB; assert the year property itself.)
+    const y2027 = await ids(`TreeHacks ${TAG} 2027`);
+    expect(y2027).toContain(created.space_id);
+    expect(y2027).not.toContain(data.space_id);
+    const y2026 = await ids(`TreeHacks ${TAG} 2026`);
+    expect(y2026).toContain(data.space_id);
+    expect(y2026).not.toContain(created.space_id);
+    expect(await ids(`TreeHacks ${TAG}`)).toEqual(expect.arrayContaining([created.space_id, data.space_id]));
   });
 
   it.each([

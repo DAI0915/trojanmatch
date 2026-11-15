@@ -316,6 +316,9 @@ isOneToOne: false
 "demo_check_lease":
 { Args: { "p_slot": number,"p_token_hash": string }; Returns: Json
                            },
+"demo_clear_create_limits":
+{ Args: { "p_slot": number }; Returns: number
+                           },
 "demo_end_lease":
 { Args: { "p_slot": number,"p_token_hash": string }; Returns: boolean
                            },

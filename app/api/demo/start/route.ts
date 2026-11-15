@@ -2,9 +2,8 @@ import { z } from "zod";
 import { ApiError, fromDbError } from "@/lib/api/errors";
 import { parseJson } from "@/lib/api/handler";
 import { newLeaseToken, secretsEqual, sha256Hex } from "@/lib/demo/crypto";
-import { demoFixture } from "@/lib/demo/fixtures";
 import { PRESENTER_SLOT } from "@/lib/demo/personas";
-import { clientSubject, ok, setLeaseCookie, signInAsPersona, withDemo } from "@/lib/demo/server";
+import { clientSubject, ok, resetSandbox, setLeaseCookie, signInAsPersona, withDemo } from "@/lib/demo/server";
 
 export const maxDuration = 30;
 
@@ -35,11 +34,7 @@ export const POST = withDemo(async ({ req, cfg, admin }) => {
   });
   if (leaseErr) throw fromDbError(leaseErr);
 
-  const { error: resetErr } = await admin.rpc("demo_reset_slot", { p_slot: PRESENTER_SLOT, p_fixture: demoFixture() });
-  if (resetErr) {
-    console.error("[demo] reset failed", resetErr.message);
-    throw new ApiError("INTERNAL", "Demo data could not be prepared.");
-  }
+  await resetSandbox(admin);
 
   await signInAsPersona(cfg, "jordan");
   await setLeaseCookie(PRESENTER_SLOT, token, cfg.DEMO_LEASE_MINUTES);

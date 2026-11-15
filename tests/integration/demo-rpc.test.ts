@@ -305,3 +305,87 @@ describe("user-facing labels", () => {
     expect(error?.code).toBe("42501");
   });
 });
+
+describe("demo reset clears Space-creation limits for this sandbox's synthetic personas only", () => {
+  let otherSlotPersona: TestUser;
+  const hackPayload = (title: string) => ({
+    type: "hackathon", title, edition_year: 2027, start_date: "2027-02-14", end_date: "2027-02-16",
+    timezone: "America/Los_Angeles", format: "in_person",
+  });
+  const events = async (subject: string, kind: string) =>
+    (await db.query(`select count(*)::int n from private.api_events where subject = $1 and kind = $2`, [subject, kind])).rows[0].n as number;
+  const prodLimitDigest = async () =>
+    (await db.query(
+      `select count(*)::int n, md5(coalesce(string_agg(subject || kind || created_at::text, '|' order by id), '')) d
+       from private.api_events where subject = $1`,
+      [prodUser.id],
+    )).rows[0];
+
+  beforeAll(async () => {
+    otherSlotPersona = await createTestUser({ displayName: "Synthetic other slot", appMetadata: { scope: "demo:3", is_synthetic: true } });
+    const { error } = await adminClient().rpc("demo_register_personas", {
+      p_slot: 3, p_personas: [{ persona_key: `other_${TAG}`, user_id: otherSlotPersona.id, switchable: false }],
+    });
+    expect(error).toBeNull();
+    await adminClient().rpc("demo_reset_slot", { p_slot: SLOT, p_fixture: fixture() });
+    await db.query(`delete from private.api_events where subject = $1`, [presenter.id]);
+  });
+
+  afterAll(async () => {
+    await db.query(`delete from private.api_events where subject = any($1)`, [[presenter.id, prodUser.id, otherSlotPersona.id]]);
+    await db.query(`delete from private.demo_personas where slot = 3 and user_id = $1`, [otherSlotPersona.id]);
+    await deleteTestUsers([otherSlotPersona]);
+  });
+
+  it("is service-role only", async () => {
+    for (const client of [anonClient(), prodUser.client, presenter.client]) {
+      const { error } = await client.rpc("demo_clear_create_limits" as never, { p_slot: SLOT } as never);
+      expect(error?.code).toBe("42501");
+    }
+    const { error } = await adminClient().rpc("demo_clear_create_limits", { p_slot: -1 });
+    expect(error?.message).toMatch(/INVALID_INPUT/);
+  });
+
+  it("clears only this slot's synthetic create_space events", async () => {
+    const seed = async (subject: string, kind: string, n: number) => {
+      for (let i = 0; i < n; i++) await db.query(`insert into private.api_events (subject, kind) values ($1, $2)`, [subject, kind]);
+    };
+    await seed(presenter.id, "create_space", 3);
+    await seed(presenter.id, "join_code_failed", 2);
+    await seed(prodUser.id, "create_space", 3);
+    await seed(otherSlotPersona.id, "create_space", 2);
+    const prodBefore = await prodLimitDigest();
+
+    const { data, error } = await adminClient().rpc("demo_clear_create_limits", { p_slot: SLOT });
+    expect(error).toBeNull();
+    expect(data).toBe(3);
+
+    expect(await events(presenter.id, "create_space")).toBe(0);
+    expect(await events(presenter.id, "join_code_failed")).toBe(2); // other limit kinds are kept
+    expect(await events(otherSlotPersona.id, "create_space")).toBe(2); // other sandboxes untouched
+    expect(await prodLimitDigest()).toEqual(prodBefore); // production limits untouched
+  });
+
+  it("normal rate limiting still applies without a reset", async () => {
+    await adminClient().rpc("demo_clear_create_limits", { p_slot: SLOT });
+    for (let i = 0; i < 10; i++) {
+      const { error } = await presenter.client.rpc("create_space", { p_payload: hackPayload(`Limit ${TAG} ${String.fromCharCode(97 + i)}`) });
+      expect(error, `create #${i + 1}`).toBeNull();
+    }
+    const blocked = await presenter.client.rpc("create_space", { p_payload: hackPayload(`Limit ${TAG} k`) });
+    expect(blocked.error?.message).toMatch(/^RATE_LIMITED/);
+  });
+
+  it("survives 12 consecutive create → reset → clear cycles (production unchanged)", async () => {
+    const before = await snapshotProd();
+    const prodLimitsBefore = await prodLimitDigest();
+    for (let i = 0; i < 12; i++) {
+      await adminClient().rpc("demo_reset_slot", { p_slot: SLOT, p_fixture: fixture() });
+      await adminClient().rpc("demo_clear_create_limits", { p_slot: SLOT });
+      const { error } = await presenter.client.rpc("create_space", { p_payload: hackPayload(`TreeHacks ${TAG}`) });
+      expect(error, `cycle ${i + 1}`).toBeNull();
+    }
+    expect(await snapshotProd()).toEqual(before);
+    expect(await prodLimitDigest()).toEqual(prodLimitsBefore);
+  });
+});

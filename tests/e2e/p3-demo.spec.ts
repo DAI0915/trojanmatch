@@ -161,6 +161,28 @@ test.describe("P3 presenter demo sandbox", () => {
     await second.context.close();
   });
 
+  test("11 consecutive create → reset cycles never hit the Space-creation limit", async ({ browser }, info) => {
+    test.skip(info.project.name !== "demo-desktop", "API-level check; one viewport is enough");
+    const { context, page } = await startDemo(browser, { width: 1440, height: 900 });
+    const headers = { origin: new URL(page.url()).origin };
+    const payload = {
+      type: "hackathon", title: "TreeHacks", edition_year: 2027, start_date: "2027-02-14", end_date: "2027-02-16",
+      timezone: "America/Los_Angeles", format: "in_person", visibility: "public",
+    };
+    for (let i = 1; i <= 11; i++) {
+      const created = await page.request.post("/api/spaces", { headers, data: payload });
+      expect(created.status(), `create #${i}: ${await created.text()}`).toBe(201);
+      const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
+      expect(reset.status(), `reset #${i}`).toBe(200);
+      expect((await reset.json()).cleared_create_limits, `reset #${i}`).toBe(1);
+    }
+    // The sandbox is back to its starting state.
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
   test("production users never see demo data", async ({ browser }, info) => {
     test.skip(!DEV_PASSWORD, "DEV_TEST_PASSWORD not set");
     const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
