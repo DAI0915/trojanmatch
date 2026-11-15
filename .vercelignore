@@ -1,0 +1,11 @@
+# Never upload local secrets or local state to Vercel builds.
+.env
+.env.*
+!.env.example
+.vercel
+supabase/.temp
+supabase/.branches
+test-results
+playwright-report
+node_modules
+.next
