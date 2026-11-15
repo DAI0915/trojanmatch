@@ -548,6 +548,144 @@ test.describe("P3 presenter demo sandbox", () => {
     await context.close();
   });
 
+  test("P6 A–H: invite → Maya & Priya accept → Active → workspace chat → AI Kickoff → reset", async ({ browser }, info) => {
+    test.setTimeout(300_000);
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const mobile = viewport.width < 1024;
+    const shot = (n: string) => `test-results/screens/p6-demo-${n}-${info.project.name}.png`;
+    const { context, page } = await startDemo(browser, viewport);
+    const headers = { origin: new URL(page.url()).origin };
+    const banner = page.getByRole("status").filter({ hasText: "Demo Mode" });
+    const switchTo = async (button: RegExp, fullName: string) => {
+      await page.goto("/demo");
+      await page.getByRole("button", { name: button }).click();
+      await expect(page).toHaveURL(/\/spaces$/);
+      await expect(banner).toContainText(`You are ${fullName} (synthetic persona)`);
+    };
+    const live = async () => {
+      if (mobile) await page.getByRole("tab", { name: "Chat" }).click();
+      await expect(page.getByTestId("connection-status")).toHaveAttribute("data-state", "live", { timeout: 20_000 });
+    };
+
+    // Setup: TreeHacks 2027 live + 6 simulated joins.
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await page.getByRole("link", { name: "Create New Space" }).first().click();
+    await page.getByLabel("Official URL").fill("https://www.treehacks.com");
+    await page.getByLabel("Start date").fill("2027-02-14");
+    await page.getByLabel("End date").fill("2027-02-16");
+    await page.getByRole("button", { name: "Check for duplicates & create" }).click();
+    const different = page.getByRole("button", { name: "No, it's different. Create Space" });
+    await expect(page.getByText("Space created. You're its first participant.").first().or(different)).toBeVisible({ timeout: 20_000 });
+    if (await different.isVisible()) await different.click();
+    await expect(page).toHaveURL(/\/setup\?created=1/);
+    const slug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.getByRole("button", { name: "Save & continue" }).click();
+    await expect(page.getByTestId("participant-count")).toBeVisible();
+    await page.goto("/demo");
+    await page.getByLabel("Space", { exact: true }).selectOption({ label: "TreeHacks 2027 (1)" });
+    await page.getByLabel("How many").fill("6");
+    await page.getByRole("button", { name: "Simulate joins" }).click();
+    await expect(page.getByText("Simulated up to 6 synthetic participants joining.")).toBeVisible();
+
+    // A. Jordan invites the recommended Maya and Priya (keeps Alex as a draft candidate only).
+    await page.goto(`/s/${slug}/smart`);
+    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
+    const bar = page.getByTestId("send-invites");
+    await bar.getByRole("checkbox", { name: "Alex Morgan" }).uncheck();
+    await bar.getByRole("button", { name: "Send 2 invitations" }).click();
+    await page.getByRole("dialog").getByLabel("Team name").fill("Trojan Builders");
+    await page.getByRole("dialog").getByRole("button", { name: "Send invitations" }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${slug}/teams/[0-9a-f-]{36}$`), { timeout: 20_000 });
+    const teamUrl = new URL(page.url()).pathname;
+    const teamId = teamUrl.split("/").pop()!;
+    const workspace = `${teamUrl}/workspace`;
+    await expect(page.getByTestId("team-badges")).toContainText("Forming");
+    // Not active yet → no workspace.
+    await page.goto(workspace);
+    await expect(page.getByTestId("workspace-denied")).toContainText("opens when the team is Active");
+
+    // B. Maya and Priya accept.
+    for (const [btn, name] of [[/^M Maya/, "Maya Chen"], [/^P Priya/, "Priya Raman"]] as const) {
+      await switchTo(btn, name);
+      await page.goto("/invitations");
+      await page.getByTestId("incoming-invitation").filter({ hasText: "Trojan Builders" }).getByRole("button", { name: /^Accept/ }).click();
+      await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
+    }
+
+    // C. Active under the existing rule (3 accepted ≥ 2, nothing pending).
+    await expect(page.getByTestId("team-badges")).toContainText("Active");
+
+    // Alex (same Space, not a member) can't open the workspace or read messages.
+    await switchTo(/^A Alex/, "Alex Morgan");
+    await page.goto(workspace);
+    await expect(page.getByTestId("workspace-denied")).toContainText("only for the team's members");
+    const denied = await page.request.get(`/api/teams/${teamId}/messages`);
+    expect(denied.status()).toBe(403);
+    expect((await page.request.post(`/api/teams/${teamId}/kickoff`, { headers, data: {} })).status()).toBe(403);
+
+    // D. Jordan opens the team workspace.
+    await switchTo(/^J Jordan/, "Jordan Lee");
+    await page.goto(teamUrl);
+    await page.getByRole("link", { name: "Open workspace" }).click();
+    await expect(page).toHaveURL(new RegExp(`${workspace}$`));
+    await expect(page.getByTestId("workspace-title")).toHaveText("Trojan Builders");
+    await expect(page.getByTestId("workspace-space")).toHaveText("TreeHacks 2027");
+    if (mobile) await page.getByRole("tab", { name: "Team" }).click();
+    for (const n of ["Jordan Lee", "Maya Chen", "Priya Raman"]) await expect(page.getByTestId("workspace-members")).toContainText(n);
+    await live();
+    await expect(page.getByTestId("chat-empty")).toBeVisible();
+
+    // E. Maya sends a message.
+    await switchTo(/^M Maya/, "Maya Chen");
+    await page.goto(workspace);
+    await live();
+    const text = "Hi team! I can own the UI and the demo flow.";
+    await page.getByTestId("chat-input").fill(text);
+    await page.getByTestId("chat-input").press("Enter");
+    await expect(page.getByTestId("chat-message").filter({ hasText: text })).toHaveAttribute("data-mine", "true");
+
+    // F. Jordan sees it, attributed to Maya.
+    await switchTo(/^J Jordan/, "Jordan Lee");
+    await page.goto(workspace);
+    await live();
+    const msg = page.getByTestId("chat-message").filter({ hasText: text });
+    await expect(msg).toBeVisible();
+    await expect(msg.getByTestId("chat-author")).toHaveText("Maya Chen");
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("chat"), fullPage: true });
+
+    // G. AI Kickoff (Gemini when configured on the server; otherwise the labeled deterministic template).
+    if (mobile) await page.getByRole("tab", { name: "AI Kickoff" }).click();
+    await expect(page.getByTestId("kickoff-empty")).toBeVisible();
+    await page.getByRole("button", { name: "Generate kickoff" }).click();
+    const kickoff = page.getByTestId("kickoff-content");
+    await expect(kickoff).toBeVisible({ timeout: 40_000 });
+    expect(["llm", "template"]).toContain(await kickoff.getAttribute("data-source"));
+    await expect(page.getByTestId("kickoff-idea").first()).toBeVisible();
+    for (const n of ["Jordan Lee", "Maya Chen", "Priya Raman"]) await expect(page.getByTestId("kickoff-roles")).toContainText(n);
+    await expect(page.getByTestId("kickoff-roles")).not.toContainText("Alex Morgan");
+    await expect(page.getByTestId("kickoff-actions").getByRole("listitem")).toHaveCount(3);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("kickoff"), fullPage: true });
+    // Persisted: reload shows the same kickoff.
+    await page.reload();
+    if (mobile) await page.getByRole("tab", { name: "AI Kickoff" }).click();
+    await expect(page.getByTestId("kickoff-content")).toBeVisible();
+
+    // H. Reset: the team, its chat and kickoff disappear with the sandbox.
+    const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
+    expect(reset.status()).toBe(200);
+    await page.goto(workspace);
+    await expect(page.getByTestId("workspace-title")).toHaveCount(0);
+    expect((await page.request.get(`/api/teams/${teamId}/messages`)).status()).toBe(403);
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
   test("production users never see demo data", async ({ browser }, info) => {
     test.skip(!DEV_PASSWORD, "DEV_TEST_PASSWORD not set");
     const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };

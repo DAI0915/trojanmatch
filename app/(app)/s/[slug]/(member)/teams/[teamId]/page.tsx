@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Crown, Inbox, Pencil, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Crown, Inbox, MessagesSquare, Pencil, Sparkles, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { CancelInvitationButton, FinalizeTeamButton, RequestToJoinButton } from "@/components/invite/invitation-actions";
@@ -52,9 +52,14 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isMember && team.status === "active" && (
+            <Link href={`/s/${slug}/teams/${team.id}/workspace`} className={buttonVariants()}>
+              <MessagesSquare data-icon="inline-start" aria-hidden /> Open workspace
+            </Link>
+          )}
           {canRecruit && team.status !== "archived" && (
             <>
-              <Link href={`/s/${slug}/grow`} className={buttonVariants()}>
+              <Link href={`/s/${slug}/grow`} className={buttonVariants({ variant: team.status === "active" ? "outline" : "default" })}>
                 <Sparkles data-icon="inline-start" aria-hidden /> Grow my team
               </Link>
               <Link href={`/s/${slug}/teams/${team.id}/edit`} className={buttonVariants({ variant: "outline" })}>
