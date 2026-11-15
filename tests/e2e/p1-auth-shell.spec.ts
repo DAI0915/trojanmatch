@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const DEV1 = "dev1@trojanmatch.test";
+// Each viewport project uses its own account so parallel runs stay isolated.
+const accountFor = (project: string) => (project === "mobile" ? "dev2@trojanmatch.test" : DEV1);
+const nameFor = (project: string) => (project === "mobile" ? "Dev Tester B" : "Dev Tester A");
 const PASSWORD = process.env.DEV_TEST_PASSWORD ?? "";
 
 async function signIn(page: Page, email = DEV1, password = PASSWORD) {
@@ -41,7 +44,8 @@ test.describe("P1 — auth & shell @smoke", () => {
 
   test("confirmed dev account signs in, sees the shell, and signs out", async ({ page }, info) => {
     test.skip(!PASSWORD, "DEV_TEST_PASSWORD not set");
-    await signIn(page);
+    const email = accountFor(info.project.name);
+    await signIn(page, email);
     await expect(page).toHaveURL(/\/spaces$/);
     await expect(page.getByRole("heading", { name: "Find your hackathon or course project" })).toBeVisible();
     await expect(page.getByText("You haven't joined a Space yet")).toBeVisible();
@@ -60,9 +64,9 @@ test.describe("P1 — auth & shell @smoke", () => {
     const api = await page.request.get("/api/profile");
     expect(api.status()).toBe(200);
     const body = await api.json();
-    expect(body.profile.display_name).toBe("Dev Tester A");
+    expect(body.profile.display_name).toBe(nameFor(info.project.name));
     expect(body.profile.scope).toBe("prod");
-    expect(JSON.stringify(body)).not.toContain(DEV1); // email is never in profile payloads
+    expect(JSON.stringify(body)).not.toContain(email); // email is never in profile payloads
 
     // Space switcher opens and offers "Find or create a Space".
     if (info.project.name === "mobile") await page.keyboard.press("Escape");
