@@ -1,7 +1,7 @@
 import { ExternalLink, GraduationCap, Trophy } from "lucide-react";
 import type { SpaceDetail } from "@/lib/spaces";
 import { FORMAT_LABEL, formatDateRange, formatDateTime, plural, teamSizeLabel } from "@/lib/format";
-import { CommunityBadge, InviteOnlyBadge, StatusBadge, UnverifiedSizeBadge } from "./space-badges";
+import { CommunityBadge, DemoSandboxBadge, InviteOnlyBadge, StatusBadge, UnverifiedSizeBadge } from "./space-badges";
 
 export function SpaceHeader({ space: s }: { space: SpaceDetail }) {
   const Icon = s.type === "course" ? GraduationCap : Trophy;
@@ -19,6 +19,7 @@ export function SpaceHeader({ space: s }: { space: SpaceDetail }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
+        {s.is_demo && <DemoSandboxBadge />}
         <CommunityBadge />
         {s.team_size_source === "app_default" && <UnverifiedSizeBadge />}
         {s.requires_code && <InviteOnlyBadge />}
@@ -56,7 +57,12 @@ export function SpaceFacts({ space: s }: { space: SpaceDetail }) {
     label: "Team deadline",
     value: s.team_deadline_at ? formatDateTime(s.team_deadline_at, s.hackathon?.timezone) : "Unknown",
   });
-  facts.push({ label: "Participants", value: plural(Number(s.participant_count), "student") });
+  facts.push({
+    label: "Participants",
+    value:
+      plural(Number(s.participant_count), "student") +
+      (Number(s.synthetic_participant_count) > 0 ? ` (${s.synthetic_participant_count} synthetic)` : ""),
+  });
 
   return (
     <dl className="grid gap-x-6 gap-y-3 rounded-xl border bg-card p-4 text-sm sm:grid-cols-2 sm:p-5">

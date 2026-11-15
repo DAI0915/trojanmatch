@@ -1,4 +1,4 @@
-import { AlertTriangle, Lock, Users } from "lucide-react";
+import { AlertTriangle, FlaskConical, Lock, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 /** Every student-created Space is Community-created; "Verified" is never shown in the MVP. */
@@ -31,6 +31,14 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <Badge variant="secondary" className="font-normal capitalize">
       {status}
+    </Badge>
+  );
+}
+
+export function DemoSandboxBadge() {
+  return (
+    <Badge variant="outline" className="gap-1 border-brand-gold/70 bg-brand-gold/15 font-normal text-brand-gold-foreground">
+      <FlaskConical className="size-3" aria-hidden /> Demo sandbox · synthetic
     </Badge>
   );
 }

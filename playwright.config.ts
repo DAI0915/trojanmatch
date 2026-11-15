@@ -14,8 +14,16 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL, trace: "retain-on-failure" },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
-    { name: "mobile", use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 812 }, isMobile: false } },
+    { name: "desktop", testIgnore: /p3-demo/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
+    { name: "mobile", testIgnore: /p3-demo/, use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 812 }, isMobile: false } },
+    // The presenter sandbox is a single shared slot: run its specs one viewport at a time.
+    { name: "demo-desktop", testMatch: /p3-demo/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
+    {
+      name: "demo-mobile",
+      testMatch: /p3-demo/,
+      dependencies: ["demo-desktop"],
+      use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 812 }, isMobile: false },
+    },
   ],
   webServer: isLocal
     ? { command: "npm run start", url: `${baseURL}/api/health`, reuseExistingServer: true, timeout: 120_000 }

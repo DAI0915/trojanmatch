@@ -54,6 +54,7 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
               </h2>
               <p className="mt-1 text-sm text-muted-foreground" data-testid="participant-count">
                 {plural(count, "participant")} in this Space
+                {Number(space.synthetic_participant_count) > 0 ? ` (${space.synthetic_participant_count} synthetic)` : ""}
                 {space.recruiting_team_count > 0 ? ` · ${plural(Number(space.recruiting_team_count), "team")} recruiting` : ""}
               </p>
               <p className="mt-3 text-xs text-muted-foreground">

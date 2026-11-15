@@ -149,14 +149,14 @@ isOneToOne: false
                   ]
                 },"participations": {
                   Row: {
-                    "accept_invites": boolean,"availability_override": (number)[] | null,"created_at": string,"desired_roles": (string)[],"goal": string | null,"goal_note": string | null,"id": string,"looking_for_team": boolean,"notes": string | null,"setup_completed": boolean,"smart_match_opt_in": boolean,"space_id": string,"topics": (string)[],"updated_at": string,"user_id": string,"visible_to_members": boolean
+                    "accept_invites": boolean,"availability_override": (number)[] | null,"created_at": string,"desired_roles": (string)[],"goal": string | null,"goal_note": string | null,"id": string,"looking_for_team": boolean,"notes": string | null,"setup_completed": boolean,"smart_match_opt_in": boolean,"source": string,"space_id": string,"topics": (string)[],"updated_at": string,"user_id": string,"visible_to_members": boolean
                   }
                   ComputedFields: never
                   Insert: {
-                    "accept_invites"?: boolean,"availability_override"?: (number)[] | null,"created_at"?: string,"desired_roles"?: (string)[],"goal"?: string | null,"goal_note"?: string | null,"id"?: string,"looking_for_team"?: boolean,"notes"?: string | null,"setup_completed"?: boolean,"smart_match_opt_in"?: boolean,"space_id": string,"topics"?: (string)[],"updated_at"?: string,"user_id": string,"visible_to_members"?: boolean
+                    "accept_invites"?: boolean,"availability_override"?: (number)[] | null,"created_at"?: string,"desired_roles"?: (string)[],"goal"?: string | null,"goal_note"?: string | null,"id"?: string,"looking_for_team"?: boolean,"notes"?: string | null,"setup_completed"?: boolean,"smart_match_opt_in"?: boolean,"source"?: string,"space_id": string,"topics"?: (string)[],"updated_at"?: string,"user_id": string,"visible_to_members"?: boolean
                   }
                   Update: {
-                    "accept_invites"?: boolean,"availability_override"?: (number)[] | null,"created_at"?: string,"desired_roles"?: (string)[],"goal"?: string | null,"goal_note"?: string | null,"id"?: string,"looking_for_team"?: boolean,"notes"?: string | null,"setup_completed"?: boolean,"smart_match_opt_in"?: boolean,"space_id"?: string,"topics"?: (string)[],"updated_at"?: string,"user_id"?: string,"visible_to_members"?: boolean
+                    "accept_invites"?: boolean,"availability_override"?: (number)[] | null,"created_at"?: string,"desired_roles"?: (string)[],"goal"?: string | null,"goal_note"?: string | null,"id"?: string,"looking_for_team"?: boolean,"notes"?: string | null,"setup_completed"?: boolean,"smart_match_opt_in"?: boolean,"source"?: string,"space_id"?: string,"topics"?: (string)[],"updated_at"?: string,"user_id"?: string,"visible_to_members"?: boolean
                   }
                   Relationships: [
                     {
@@ -312,6 +312,33 @@ isOneToOne: false
                            },
 "create_space":
 { Args: { "p_payload": Json }; Returns: Json
+                           },
+"demo_check_lease":
+{ Args: { "p_slot": number,"p_token_hash": string }; Returns: Json
+                           },
+"demo_end_lease":
+{ Args: { "p_slot": number,"p_token_hash": string }; Returns: boolean
+                           },
+"demo_lease_valid":
+{ Args: { "p_token_hash": string }; Returns: boolean
+                           },
+"demo_rate_exceeded":
+{ Args: { "p_kind": string,"p_max": number,"p_subject": string,"p_window_minutes": number }; Returns: boolean
+                           },
+"demo_rate_record":
+{ Args: { "p_kind": string,"p_subject": string }; Returns: undefined
+                           },
+"demo_register_personas":
+{ Args: { "p_personas": Json,"p_slot": number }; Returns: number
+                           },
+"demo_reset_slot":
+{ Args: { "p_fixture": Json,"p_slot": number }; Returns: Json
+                           },
+"demo_simulate_joins":
+{ Args: { "p_count": number,"p_slot": number,"p_space_id": string }; Returns: Json
+                           },
+"demo_start_lease":
+{ Args: { "p_minutes": number,"p_slot": number,"p_token_hash": string }; Returns: Json
                            },
 "get_invite_link":
 { Args: { "p_space_id": string }; Returns: Json

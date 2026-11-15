@@ -18,7 +18,9 @@ export type SpaceDetail = {
   team_deadline_at: string | null;
   created_at: string;
   is_member: boolean;
+  is_demo: boolean;
   participant_count: number;
+  synthetic_participant_count: number;
   recruiting_team_count: number;
   hackathon: null | {
     edition_year: number;

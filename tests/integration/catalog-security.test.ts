@@ -15,6 +15,7 @@ const ANON_EXECUTE_ALLOWLIST: string[] = ["public.get_space", "public.search_spa
 const AUTHENTICATED_EXECUTE_ALLOWLIST = [
   "public.check_space_duplicates",
   "public.create_space",
+  "public.demo_lease_valid",
   "public.get_invite_link",
   "public.get_space",
   "public.join_space",
@@ -100,6 +101,24 @@ describe("functions", () => {
     expect(rows.map((r) => r.name).sort()).toEqual([...AUTHENTICATED_EXECUTE_ALLOWLIST].sort());
   });
 
+  it("demo administration functions are executable by service_role only", async () => {
+    const { rows } = await db.query(`
+      select p.proname,
+             has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+             has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth,
+             has_function_privilege('service_role', p.oid, 'EXECUTE') as service
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'demo\\_%' and p.proname <> 'demo_lease_valid'
+      order by 1
+    `);
+    expect(rows.length).toBeGreaterThanOrEqual(8);
+    for (const r of rows) {
+      expect({ fn: r.proname, anon: r.anon, auth: r.auth, service: r.service }).toEqual({
+        fn: r.proname, anon: false, auth: false, service: true,
+      });
+    }
+  });
+
   // Migrations run as `postgres`, so only postgres's default ACLs apply to our
   // objects (supabase_admin's defaults cover objects supabase_admin creates).
   it("postgres's default privileges grant nothing to anon/authenticated on future functions, tables or sequences", async () => {
@@ -167,7 +186,7 @@ describe("tables", () => {
   });
 
   it("nobody but the owner/service role can read join codes or private tables", async () => {
-    const targets = ["public.space_secrets", "private.app_config", "private.api_events", "private.demo_slots"];
+    const targets = ["public.space_secrets", "private.app_config", "private.api_events", "private.demo_slots", "private.demo_personas"];
     for (const role of ["anon", "authenticated"]) {
       for (const t of targets) {
         const { rows } = await db.query(`select has_table_privilege($1, $2, 'SELECT') as ok`, [role, t]);

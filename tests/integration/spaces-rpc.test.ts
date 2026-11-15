@@ -135,6 +135,13 @@ describe("create_space", () => {
     const { data, error } = await create(alice, hackathon({ edition_year: 2026, start_date: "2026-02-14", end_date: "2026-02-16" }));
     expect(error).toBeNull();
     expect(data.space_id).not.toBe(created.space_id);
+
+    // Search treats an explicit year as a hard filter; no year finds both editions.
+    const ids = async (q: string) =>
+      ((await rpc<Array<{ id: string }>>(null, "search_spaces", { p_type: "hackathon", p_query: q })).data ?? []).map((r) => r.id);
+    expect(await ids(`TreeHacks ${TAG} 2027`)).toEqual([created.space_id]);
+    expect(await ids(`TreeHacks ${TAG} 2026`)).toEqual([data.space_id]);
+    expect((await ids(`TreeHacks ${TAG}`)).sort()).toEqual([created.space_id, data.space_id].sort());
   });
 
   it.each([

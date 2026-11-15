@@ -1,17 +1,47 @@
+import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy-session";
+import { carryCookies, updateSession } from "@/lib/supabase/proxy-session";
 import { isPublicPath } from "@/lib/routes";
+import { LEASE_COOKIE, parseLeaseCookie } from "@/lib/demo/personas";
 
 /**
  * Next.js 16 Proxy (formerly middleware). UX-level gate only: every Route
  * Handler, Server Action and RPC re-checks authorization itself.
+ *
+ * Demo sessions: a signed-in DEMO persona must also hold the current presenter
+ * lease. If it was replaced (a new start) or expired, the session is signed out
+ * via the supported Auth API. Production users are unaffected.
  */
 export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const { user, supabase, getResponse } = await updateSession(request);
   const { pathname, search } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+
+  const scope = (user?.app_metadata as { scope?: string } | undefined)?.scope;
+  if (user && typeof scope === "string" && scope.startsWith("demo:") && !isPublicPath(pathname)) {
+    const lease = parseLeaseCookie(request.cookies.get(LEASE_COOKIE)?.value);
+    let valid = false;
+    if (lease) {
+      const hash = createHash("sha256").update(lease.token).digest("hex");
+      const { data } = await supabase.rpc("demo_lease_valid", { p_token_hash: hash });
+      valid = data === true;
+    }
+    if (!valid) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      const out = isApi
+        ? NextResponse.json(
+            { error: { code: "DEMO_LEASE_INVALID", message: "This demo session has ended." } },
+            { status: 401 },
+          )
+        : NextResponse.redirect(new URL("/demo?expired=1", request.url));
+      carryCookies(getResponse(), out);
+      out.cookies.delete(LEASE_COOKIE);
+      return out;
+    }
+  }
 
   if (!user && !isPublicPath(pathname)) {
-    if (pathname.startsWith("/api/")) {
+    if (isApi) {
       return NextResponse.json(
         { error: { code: "NOT_AUTHENTICATED", message: "Sign in required." } },
         { status: 401 },
@@ -30,7 +60,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return getResponse();
 }
 
 export const config = {

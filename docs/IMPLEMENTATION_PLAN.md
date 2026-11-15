@@ -411,3 +411,37 @@ Unchanged from v1 (resolutions 1–18 still stand), with these updates:
 2. `npm test` runs unit tests, integration tests (including finalize, scope uniqueness, and direct RPC tests), and the catalog audit, and must be green. `npx supabase db lint` must be clean.
 3. `npx playwright test` locally, then `E2E_BASE_URL=<prod> npx playwright test --grep @smoke`.
 4. 08:00–09:00: run the spec §16 three-minute script twice on the prod presenter slot, and check AC01–AC09 against real behavior (a README checklist).
+
+---
+
+## Implementation notes (recorded during build)
+
+### P3 — Presenter demo sandbox (as built)
+- **Demo admin functions live in `public`, not `private`.** PostgREST (used by the server-side
+  service-role client) cannot reach the `private` schema. The functions are named `demo_*` and
+  EXECUTE is granted to `service_role` **only**; `tests/integration/catalog-security.test.ts`
+  fails if anon/authenticated can ever execute them. The one exception is
+  `demo_lease_valid(token_hash)`, which authenticated users may call to learn whether *their own*
+  slot's lease is valid (boolean only).
+- **Scope derivation:** every demo function obtains its scope via `private.demo_scope(slot)`, which
+  can only return `demo:0`–`demo:20`; all writes are filtered by that scope. No path yields `prod`.
+- **Simulated joins** reuse `private.join_space_as()` — the same rules as `join_space`
+  (scope, status, policy, join code, idempotency) — and are labeled `participations.source =
+  'simulated'` (seeded fixture rows are `'seed'`; real joins are `'self'`; not user-editable).
+- **Sessions:** start/switch use `signInWithPassword` with HMAC-derived persona passwords; reset does
+  not touch auth; stale sessions are signed out by `proxy.ts` via `signOut({ scope: 'local' })` when
+  the lease cookie no longer matches. No writes to `auth.*` tables.
+- **Search fix:** an explicit 4-digit year in a search query is a hard filter
+  (`search_spaces`), so "TreeHacks 2027" never surfaces TreeHacks 2026.
+- **Throttle:** wrong presenter codes are limited to 15/hour per salted IP hash.
+- **Migration numbering:** P3's migration is `20261114000005_demo.sql`. P4's team migration must use a
+  **later** timestamp (not `…0004`) so applied migrations stay strictly ordered.
+- **Fixture:** 44 synthetic personas, AI@USC Hackathon 2026 (32), TreeHacks 2026 decoy (6),
+  CSCI 567 Fall 2026 Final Group Project (16, invite-only). TreeHacks 2027 is never seeded.
+  P4 should add recruiting teams to the fixture once the team RPCs exist.
+
+### Phase-numbering clarification (from the product owner)
+Plan v2 moved Profiles into P2 and made P3 Demo Mode. No Team Foundation requirement from the
+original spec is dropped: **P4 must first implement and verify basic Team creation, membership,
+authorization and recruitment** (then Grow My Team and Smart Team Formation); **P5 completes
+invitations, acceptance, activation and member management.**

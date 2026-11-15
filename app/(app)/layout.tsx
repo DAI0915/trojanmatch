@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
+import { DemoBanner } from "@/components/demo/demo-banner";
 import { AppNav } from "@/components/shell/app-nav";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { SpaceSwitcher } from "@/components/shell/space-switcher";
@@ -13,7 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (!user) redirect("/sign-in");
 
   const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from("profiles").select("display_name, is_synthetic").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("display_name, is_synthetic, scope").eq("id", user.id).maybeSingle(),
     supabase
       .from("participations")
       .select("space:matching_spaces(id, slug, title, type)")
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <AppNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
+        {profile?.scope?.startsWith("demo:") && <DemoBanner name={profile.display_name} />}
         <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6">
           <MobileNav />
           <div className="min-w-0 flex-1">
