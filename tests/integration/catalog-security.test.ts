@@ -7,12 +7,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { anonClient, createTestUser, dbClient, deleteTestUsers, type TestUser } from "./helpers";
 
-// Functions anon may execute (P2 adds search_spaces / get_space_by_slug here).
-const ANON_EXECUTE_ALLOWLIST: string[] = [];
+// Functions anon may execute.
+const ANON_EXECUTE_ALLOWLIST: string[] = ["public.get_space", "public.search_spaces"];
 
 // Functions authenticated may execute. Private helpers are executable (RLS needs
 // them) but unreachable over HTTP because `private` is not an exposed schema.
 const AUTHENTICATED_EXECUTE_ALLOWLIST = [
+  "public.check_space_duplicates",
+  "public.create_space",
+  "public.get_invite_link",
+  "public.get_space",
+  "public.join_space",
+  "public.search_spaces",
   "private.can_recruit",
   "private.current_scope",
   "private.is_active_member",

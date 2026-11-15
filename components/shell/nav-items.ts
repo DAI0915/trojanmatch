@@ -2,11 +2,12 @@ import { Compass, Inbox, Sparkles, UserRound, UsersRound } from "lucide-react";
 
 /** Primary navigation (spec §2). Space-scoped items resolve against the current Space. */
 export const NAV_ITEMS = [
-  { key: "discover", label: "Discover", icon: Compass, spaceScoped: true, path: "discover" },
-  { key: "smart", label: "Smart Match", icon: Sparkles, spaceScoped: true, path: "smart" },
-  { key: "teams", label: "My Teams", icon: UsersRound, spaceScoped: false, path: "/teams" },
-  { key: "invitations", label: "Invitations", icon: Inbox, spaceScoped: false, path: "/invitations" },
-  { key: "profile", label: "Profile", icon: UserRound, spaceScoped: false, path: "/profile" },
+  { key: "discover", label: "Discover", icon: Compass, spaceScoped: true, path: "discover", available: true },
+  // Smart Team Formation ships in P4; shown disabled so it never links to a missing page.
+  { key: "smart", label: "Smart Match", icon: Sparkles, spaceScoped: true, path: "smart", available: false },
+  { key: "teams", label: "My Teams", icon: UsersRound, spaceScoped: false, path: "/teams", available: true },
+  { key: "invitations", label: "Invitations", icon: Inbox, spaceScoped: false, path: "/invitations", available: true },
+  { key: "profile", label: "Profile", icon: UserRound, spaceScoped: false, path: "/profile", available: true },
 ] as const;
 
 export type ShellSpace = { id: string; slug: string; title: string; type: "hackathon" | "course" };

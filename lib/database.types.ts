@@ -305,7 +305,28 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "check_space_duplicates":
+{ Args: { "p_payload": Json }; Returns: {
+              "is_member": boolean,"match_kind": string,"participant_count": number,"requires_code": boolean,"slug": string,"space_id": string,"title": string,"type": Database["public"]['Enums']["space_type"],"visibility": Database["public"]['Enums']["space_visibility"]
+            }[]
+                           },
+"create_space":
+{ Args: { "p_payload": Json }; Returns: Json
+                           },
+"get_invite_link":
+{ Args: { "p_space_id": string }; Returns: Json
+                           },
+"get_space":
+{ Args: { "p_slug": string }; Returns: Json
+                           },
+"join_space":
+{ Args: { "p_code"?: string,"p_space_id": string }; Returns: Json
+                           },
+"search_spaces":
+{ Args: { "p_limit"?: number,"p_query"?: string,"p_type"?: Database["public"]['Enums']["space_type"] }; Returns: {
+              "allowed_sections": (string)[],"assignment_name": string,"course_code": string,"created_at": string,"edition_year": number,"ends_at": string,"event_timezone": string,"format": Database["public"]['Enums']["hackathon_format"],"id": string,"is_member": boolean,"join_policy": Database["public"]['Enums']["join_policy"],"max_team_size": number,"min_team_size": number,"organizer": string,"participant_count": number,"slug": string,"starts_at": string,"status": Database["public"]['Enums']["space_status"],"team_size_source": Database["public"]['Enums']["team_size_source"],"term": string,"title": string,"type": Database["public"]['Enums']["space_type"],"university": string,"visibility": Database["public"]['Enums']["space_visibility"]
+            }[]
+                           }
           }
           Enums: {
             "activation_mode": "auto"|"finalized","ai_source": "llm"|"template","experience_level": "beginner"|"intermediate"|"advanced","hackathon_format": "in_person"|"online"|"hybrid","invite_kind": "invite"|"request","invite_status": "pending"|"accepted"|"declined"|"cancelled"|"expired","join_policy": "open"|"code","match_mode": "form"|"grow"|"replace"|"find","member_status": "active"|"left","space_status": "open"|"closed"|"archived","space_type": "hackathon"|"course","space_visibility": "public"|"unlisted","team_member_role": "owner"|"member","team_size_source": "creator_stated"|"app_default","team_status": "draft"|"forming"|"active"|"archived"

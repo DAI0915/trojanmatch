@@ -22,7 +22,10 @@ afterEach(async () => {
   await db.query("rollback");
 });
 
-const URL_NORM = "https://treehacks.com";
+// Unique per run so persisted data (e.g. from E2E runs) can never collide.
+const RUN = Math.random().toString(36).slice(2, 10);
+const URL_NORM = `https://${RUN}.treehacks.example.com`;
+const KEY = `h|treehacks${RUN}|2027`;
 
 async function insertHackathonDetails(spaceId: string, scope: string, year = 2027, url: string | null = URL_NORM) {
   await db.query(
@@ -89,16 +92,16 @@ describe("hackathon official URL + edition year", () => {
 
 describe("Space identity key", () => {
   it("is unique within a scope", async () => {
-    await insertSpace(db, { scope: "prod", identityKey: "h|treehacks|2027" });
-    await expectPgError(() => insertSpace(db, { scope: "prod", identityKey: "h|treehacks|2027" }), "23505",
+    await insertSpace(db, { scope: "prod", identityKey: KEY });
+    await expectPgError(() => insertSpace(db, { scope: "prod", identityKey: KEY }), "23505",
       "matching_spaces_scope_identity_key",
     );
   });
 
   it("may repeat across scopes (prod vs demo vs another demo slot)", async () => {
-    await insertSpace(db, { scope: "prod", identityKey: "h|treehacks|2027" });
-    await insertSpace(db, { scope: "demo:0", identityKey: "h|treehacks|2027" });
-    await insertSpace(db, { scope: "demo:1", identityKey: "h|treehacks|2027" });
+    await insertSpace(db, { scope: "prod", identityKey: KEY });
+    await insertSpace(db, { scope: "demo:0", identityKey: KEY });
+    await insertSpace(db, { scope: "demo:1", identityKey: KEY });
   });
 
   it("rejects malformed scopes", async () => {

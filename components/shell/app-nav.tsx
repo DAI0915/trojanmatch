@@ -13,9 +13,24 @@ export function AppNav({ onNavigate }: { onNavigate?: () => void }) {
       {NAV_ITEMS.map((item) => {
         const href = hrefFor(item, slug);
         const active = item.spaceScoped
-          ? slug !== null && pathname.startsWith(`/s/${slug}/${item.path}`)
+          ? slug !== null
+            ? pathname.startsWith(`/s/${slug}/${item.path}`)
+            : item.key === "discover" && pathname.startsWith("/spaces")
           : pathname === item.path || pathname.startsWith(`${item.path}/`);
         const Icon = item.icon;
+        if (!item.available) {
+          return (
+            <span
+              key={item.key}
+              aria-disabled="true"
+              className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/60"
+            >
+              <Icon className="size-4" aria-hidden />
+              {item.label}
+              <span className="ml-auto rounded border px-1 text-[10px] uppercase tracking-wide">Soon</span>
+            </span>
+          );
+        }
         return (
           <Link
             key={item.key}

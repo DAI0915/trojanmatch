@@ -1,39 +1,48 @@
 import { UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/shell/page-header";
+import { ProfileForm, type ProfileFormValue } from "@/components/profile/profile-form";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: PageProps<"/profile">) {
+  const sp = await searchParams;
   const { supabase, user } = await getCurrentUser();
-  const { data: profile } = await supabase
+  const { data: p } = await supabase
     .from("profiles")
-    .select("display_name, university, skills, roles, interests, onboarded, is_synthetic")
+    .select("display_name, university, bio, skills, roles, interests, experience, working_style, availability, timezone, onboarded, is_synthetic")
     .eq("id", user!.id)
     .maybeSingle();
 
-  if (!profile) {
+  if (!p) {
     return <EmptyState icon={UserRound} title="Profile not found" description="Sign out and back in to retry." />;
   }
 
+  const initial: ProfileFormValue = {
+    display_name: p.display_name,
+    university: p.university ?? "",
+    bio: p.bio ?? "",
+    skills: p.skills,
+    roles: p.roles,
+    interests: p.interests,
+    experience: p.experience,
+    working_style: (p.working_style ?? {}) as ProfileFormValue["working_style"],
+    availability: p.availability,
+    timezone: p.timezone,
+  };
+
   return (
     <>
-      <PageHeader title="Profile" description="Your global profile is shared only in Spaces where you turn on visibility." />
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {profile.display_name}
-            {profile.is_synthetic && <Badge variant="outline">Synthetic demo user</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-sm">
-          <p className="text-muted-foreground">
-            Account email: {user!.email} (only visible to you; never shown to other students)
-          </p>
-          <p>{profile.onboarded ? "Profile complete." : "Profile setup (skills, roles, interests, availability) comes next."}</p>
-        </CardContent>
-      </Card>
+      <PageHeader
+        title="Your profile"
+        description="One global profile, reused across Spaces. Other students see it only in Spaces where you turn visibility on."
+      />
+      {p.is_synthetic && (
+        <Badge variant="outline" className="mb-4">
+          Synthetic demo user
+        </Badge>
+      )}
+      <ProfileForm initial={initial} onboarding={sp.welcome === "1" || !p.onboarded} />
     </>
   );
 }
