@@ -80,8 +80,20 @@ async function main() {
   const priv = await a.c.schema("private" as never).from("demo_slots").select("*");
   check("private schema not exposed", priv.error !== null, priv.error?.code);
 
+  // P2 Space RPCs: anon may search/read public metadata only; writes need a session.
+  const search = await anon.rpc("search_spaces" as never, { p_type: "hackathon" } as never);
+  check("anon can search public Spaces (prod scope only)", !search.error, search.error?.code);
+  for (const fn of ["create_space", "join_space", "get_invite_link", "check_space_duplicates"]) {
+    const r = await anon.rpc(fn as never, {} as never);
+    check(`rpc ${fn} not callable by anon`, r.error !== null, r.error?.code);
+  }
+  const badJoin = await a.c.rpc("join_space" as never, { p_space_id: crypto.randomUUID() } as never);
+  check("join_space on an unknown Space is refused", /^NOT_FOUND/.test(badJoin.error?.message ?? ""), badJoin.error?.message?.split(":")[0]);
+  const badLink = await a.c.rpc("get_invite_link" as never, { p_space_id: crypto.randomUUID() } as never);
+  check("get_invite_link refuses non-participants", /^NOT_PARTICIPANT/.test(badLink.error?.message ?? ""), badLink.error?.message?.split(":")[0]);
+
   const spaces = await anon.from("matching_spaces").select("id");
-  check("anon Space read works (prod public only, currently empty)", !spaces.error, `${spaces.data?.length ?? 0} rows`);
+  check("anon Space read works (prod public only)", !spaces.error, `${spaces.data?.length ?? 0} rows`);
 
   await a.c.auth.signOut();
   await b.c.auth.signOut();
