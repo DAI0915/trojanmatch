@@ -349,6 +349,9 @@ isOneToOne: false
 "get_invite_link":
 { Args: { "p_space_id": string }; Returns: Json
                            },
+"get_match_pool":
+{ Args: { "p_space_id": string,"p_team_id"?: string }; Returns: Json
+                           },
 "get_space":
 { Args: { "p_slug": string }; Returns: Json
                            },

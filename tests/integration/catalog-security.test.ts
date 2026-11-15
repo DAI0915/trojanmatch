@@ -18,6 +18,7 @@ const AUTHENTICATED_EXECUTE_ALLOWLIST = [
   "public.create_team",
   "public.demo_lease_valid",
   "public.get_invite_link",
+  "public.get_match_pool",
   "public.get_space",
   "public.join_space",
   "public.search_spaces",

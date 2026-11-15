@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // "server-only" throws outside a React Server environment; tests exercise server modules directly.
+    alias: { "server-only": new URL("./tests/stubs/server-only.ts", import.meta.url).pathname },
+  },
   test: {
     projects: [
       {

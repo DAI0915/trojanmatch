@@ -53,7 +53,8 @@ describe("demo fixture teams", () => {
       if (t.status === "active") expect(size).toBeGreaterThanOrEqual(Math.max(s.min_team_size, 2));
       for (const p of [t.owner, ...t.members]) {
         expect(members(t.space).has(p), `${p} in ${t.space}`).toBe(true);
-        expect(switchable.has(p), `${p} must stay free for the live demo`).toBe(false);
+        // Jordan forms teams live; Maya and Priya must stay eligible candidates. Alex may own a team.
+        expect(switchable.has(p) && p !== "alex", `${p} must stay free for the live demo`).toBe(false);
         expect(seen.get(`${t.space}:${p}`), `${p} on two teams in ${t.space}`).toBeUndefined();
         seen.set(`${t.space}:${p}`, t.name);
       }

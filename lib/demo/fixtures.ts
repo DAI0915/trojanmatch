@@ -231,8 +231,10 @@ const CSCI567 = [
   "julia", "rosa", "will",
 ];
 
-// Synthetic recruiting teams (P4-A). None include the four switchable personas,
-// so the live TreeHacks 2027 flow is unaffected. Every team satisfies the DB
+// Synthetic recruiting teams. Jordan (the presenter) is on none of them, and Maya
+// and Priya stay free so Smart Team Formation can suggest them. Alex owns
+// "Campus Compass" so the presenter can switch to Alex and demo Grow My Team
+// (membership is per Space, so TreeHacks 2027 is unaffected). Every team satisfies the DB
 // constraints: members are participants, target within the Space bounds,
 // capacity respected, active teams meet the Space minimum.
 export const DEMO_TEAMS = [
@@ -289,6 +291,25 @@ export const DEMO_TEAMS = [
       topics: ["health", "accessibility"],
       goal: "competitive",
       min_shared_hours: 8,
+    },
+  },
+  {
+    space: "ai_usc_2026",
+    name: "Campus Compass",
+    description: "A first-week guide that helps new students find clubs, classes and study spots. (Synthetic demo team.)",
+    owner: "alex",
+    members: ["zoe"],
+    status: "active",
+    recruiting: true,
+    target_size: 4,
+    requirements: {
+      must_roles: ["backend", "frontend"],
+      preferred_roles: ["ai_ml"],
+      skills: ["react", "python", "databases"],
+      topics: ["education", "social-good"],
+      goal: "competitive",
+      min_shared_hours: 4,
+      note: "Pitch and docs are covered; we need builders.",
     },
   },
   {

@@ -66,7 +66,7 @@ test.describe("P3 presenter demo sandbox", () => {
     // The seeded hackathon shows real counts, all labeled synthetic.
     await page.goto("/spaces?type=hackathon&q=AI%40USC");
     await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
-    await expect(page.getByTestId("participant-count")).toHaveText("32 participants in this Space (32 synthetic) · 3 teams recruiting");
+    await expect(page.getByTestId("participant-count")).toHaveText("32 participants in this Space (32 synthetic) · 4 teams recruiting");
     await expect(page.getByText("Demo sandbox · synthetic").first()).toBeVisible();
 
     // Scope isolation: no TreeHacks 2027 yet in the sandbox (even if prod has one), and prod test Spaces are invisible.
@@ -195,7 +195,7 @@ test.describe("P3 presenter demo sandbox", () => {
     const slug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
     await page.goto(`/s/${slug}/teams`);
     await expect(page.getByRole("heading", { name: "You're not on a team in this Space" })).toBeVisible();
-    for (const name of ["Prompt Pilots", "GreenGrid", "CareCompanion"]) {
+    for (const name of ["Prompt Pilots", "GreenGrid", "CareCompanion", "Campus Compass"]) {
       await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
     }
     await noHorizontalScroll(page);
