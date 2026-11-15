@@ -36,9 +36,14 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
           </div>
         </div>
         {canRecruit && (
-          <Link href={`/s/${slug}/teams/${team.id}/edit`} className={buttonVariants({ variant: "outline" })}>
-            <Pencil data-icon="inline-start" aria-hidden /> Edit team
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/s/${slug}/grow`} className={buttonVariants()}>
+              Grow my team
+            </Link>
+            <Link href={`/s/${slug}/teams/${team.id}/edit`} className={buttonVariants({ variant: "outline" })}>
+              <Pencil data-icon="inline-start" aria-hidden /> Edit team
+            </Link>
+          </div>
         )}
       </header>
 

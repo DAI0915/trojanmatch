@@ -289,10 +289,14 @@ function roleCoverage(ctx: Context, team: Prepared[], wantAssignment: boolean) {
 
   const size = 1 << T;
   let dp = new Float64Array(size).fill(-1);
+  // Tie-break between equally good assignments: prefer members in roles they actually
+  // list over "flexible" stand-ins (affects only the displayed assignment, never the score).
+  let real = new Int8Array(size);
   dp[0] = 0;
   const choice: Int16Array[] = [];
   for (const m of team) {
     const next = new Float64Array(dp); // member left unassigned
+    const nextReal = new Int8Array(real);
     const ch = wantAssignment ? new Int16Array(size).fill(-1) : null;
     for (let mask = 0; mask < size; mask++) {
       const base = dp[mask];
@@ -301,24 +305,28 @@ function roleCoverage(ctx: Context, team: Prepared[], wantAssignment: boolean) {
         const bit = 1 << r;
         if (mask & bit) continue;
         let gain = 0;
-        if (m.roleBits & bit) gain = 0.5 * ctx.targets[r].weight; // 0.5 (listed) → 1 (dedicated)
+        const lists = (m.roleBits & bit) !== 0;
+        if (lists) gain = 0.5 * ctx.targets[r].weight; // 0.5 (listed) → 1 (dedicated)
         else if (m.flexible && !(listed & bit)) gain = 0.5 * ctx.targets[r].weight; // 0 → 0.5
         else continue;
         const v = base + gain;
         const nm = mask | bit;
-        if (v > next[nm] + 1e-12) {
+        const nr = real[mask] + (lists ? 1 : 0);
+        if (v > next[nm] + 1e-12 || (Math.abs(v - next[nm]) <= 1e-12 && nr > nextReal[nm])) {
           next[nm] = v;
+          nextReal[nm] = nr;
           if (ch) ch[nm] = r;
         }
       }
     }
     dp = next;
+    real = nextReal;
     if (ch) choice.push(ch);
   }
   let best = 0;
   let bestMask = 0;
   for (let mask = 0; mask < size; mask++) {
-    if (dp[mask] > best + 1e-12) {
+    if (dp[mask] > best + 1e-12 || (dp[mask] >= 0 && Math.abs(dp[mask] - best) <= 1e-12 && real[mask] > real[bestMask])) {
       best = dp[mask];
       bestMask = mask;
     }

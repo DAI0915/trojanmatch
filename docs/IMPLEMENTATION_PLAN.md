@@ -445,3 +445,14 @@ Plan v2 moved Profiles into P2 and made P3 Demo Mode. No Team Foundation require
 original spec is dropped: **P4 must first implement and verify basic Team creation, membership,
 authorization and recruitment** (then Grow My Team and Smart Team Formation); **P5 completes
 invitations, acceptance, activation and member management.**
+
+### P4-B — Matching (as built)
+See `docs/HANDOFF_P4B.md` for the scoring definitions, search strategy, test map and the remaining
+deployment steps. Summary of deviations from §F/§G above:
+- One read-only gate, `get_match_pool(space, team?)`, replaces the planned `get_match_candidates`;
+  it also returns the caller, the team's accepted members and aggregate funnel counts.
+- Candidates must have **all four** consent switches on for both Smart Team Formation and Grow My
+  Team (both are AI suggestions).
+- Stateless: nothing is stored (`match_runs` unused); every request re-loads and re-validates the pool.
+- Role coverage uses an exact DP assignment (one dedicated role per member, 0.5 credit for
+  secondary/flexible coverage) instead of the ⌈|R|/n⌉ rule; interests use an overlap coefficient.

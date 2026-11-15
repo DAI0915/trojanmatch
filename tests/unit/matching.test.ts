@@ -319,3 +319,16 @@ describe("performance and the beam path", () => {
     expect(JSON.stringify(formTeam(ctx, [ids[0]], ids.slice(1).reverse(), 6))).toBe(JSON.stringify(r));
   });
 });
+
+describe("role assignment display", () => {
+  it("prefers a role the member actually lists over a flexible stand-in when both score the same", () => {
+    const pm = person({ id: "pm", roles: ["pm_pitch"] });
+    const dev = person({ id: "dev", roles: ["frontend", "flexible"] });
+    const ctx = buildContext([pm, dev], needs({ mustRoles: ["backend", "frontend"] }), W);
+    const e = evaluate(ctx, ["pm", "dev"]);
+    expect(e.assignment.dev).toBe("frontend");
+    expect(e.roles.find((r) => r.role === "frontend")).toMatchObject({ status: "covered", by: "dev" });
+    expect(e.roles.find((r) => r.role === "backend")?.status).toBe("missing");
+    expect(e.roleCoverage).toBe(0.5);
+  });
+});

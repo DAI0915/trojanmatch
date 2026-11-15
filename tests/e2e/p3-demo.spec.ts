@@ -231,6 +231,115 @@ test.describe("P3 presenter demo sandbox", () => {
     await context.close();
   });
 
+  test("P4-B A–H: view pool, generate team, explain, replace, then grow an existing team", async ({ browser }, info) => {
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/p4b-${n}-${info.project.name}.png`;
+    const { context, page } = await startDemo(browser, viewport);
+    const headers = { origin: new URL(page.url()).origin };
+
+    // A. Open AI@USC Hackathon 2026 → Smart Team Formation.
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const slug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.getByRole("link", { name: /^Smart Team Formation/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${slug}/smart$`));
+
+    // B. View eligible participants: consenting, team-less students of THIS Space only.
+    await expect(page.getByTestId("pool-summary")).toHaveText("20 of 31 other participants can be suggested · 7 already on a team.");
+    await page.getByText("View eligible participants (20)").click();
+    const list = page.getByTestId("pool-list");
+    await expect(list.getByText("Maya Chen")).toBeVisible();
+    await expect(list.getByText("Priya Raman")).toBeVisible();
+    for (const hidden of ["Tom Becker", "Nina Petrova", "Victor Huang", "Olivia Brown", "Ethan Park", "Alex Morgan", "Jordan Lee"]) {
+      await expect(list.getByText(hidden), hidden).toHaveCount(0);
+    }
+    await page.getByText("View eligible participants (20)").click();
+
+    // C. Generate a recommended team (draft: nobody invited, no team created).
+    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("draft-status")).toHaveText("Draft proposal · nobody has been invited");
+    await expect(page.getByTestId("member-card")).toHaveCount(4);
+    await expect(page.locator('[data-testid="member-card"][data-kind="you"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid="member-card"][data-kind="candidate"]')).toHaveCount(3);
+    await expect(page.getByText("Candidate · not invited")).toHaveCount(3);
+
+    // D. Why these students complement one another.
+    await expect(page.getByTestId("team-fit-band")).toContainText("Team Fit:");
+    for (const d of ["skill", "goal", "interest", "schedule", "style"]) await expect(page.getByTestId(`dimension-${d}`)).toBeVisible();
+    await expect(page.getByRole("list", { name: "Role coverage" }).getByRole("listitem")).toHaveCount(4);
+    await expect(page.getByTestId("role-covered").first()).toBeVisible();
+    await expect(page.getByTestId("shared-hours")).toContainText("h/week");
+    await expect(page.locator('[data-kind="candidate"]').first().getByRole("listitem").first()).toContainText(/Covers|Flexible|Strengths|Brings/);
+    await page.getByText("Compare with simple individual ranking").click();
+    await expect(page.getByTestId("baseline").getByRole("row")).toHaveCount(3);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("proposal"), fullPage: true });
+
+    // E. Replace a recommended member and observe the whole-team score change.
+    const before = Number(await page.getByTestId("team-fit-score").innerText());
+    const replacedName = await page.locator('[data-kind="candidate"]').first().getByTestId("member-name").innerText();
+    await page.locator('[data-kind="candidate"]').first().getByRole("button", { name: /^Replace / }).click();
+    const firstOption = page.getByTestId("replace-option").first();
+    await expect(firstOption).toBeVisible({ timeout: 20_000 });
+    const delta = Number((await firstOption.getByTestId("replace-delta").innerText()).replace("−", "-").replace("±", "").replace(/[^0-9.+-]/g, ""));
+    await page.screenshot({ path: shot("replace"), fullPage: false });
+    await firstOption.getByRole("button", { name: /^Use .* instead$/ }).click();
+    await expect(page.getByTestId("replace-summary")).toContainText(`Replaced ${replacedName} with`);
+    const after = Number(await page.getByTestId("team-fit-score").innerText());
+    expect(Math.abs(after - (before + delta))).toBeLessThan(0.0021);
+    await expect(page.getByTestId("member-card")).toHaveCount(4);
+    await expect(page.locator('[data-kind="candidate"]').getByTestId("member-name").filter({ hasText: replacedName })).toHaveCount(0);
+
+    // M. Nothing was created: Jordan still has no team and no invitations.
+    await page.goto(`/s/${slug}/teams`);
+    await expect(page.getByRole("heading", { name: "You're not on a team in this Space" })).toBeVisible();
+    await page.goto("/invitations");
+    await expect(page.getByRole("heading", { name: "No pending invitations" })).toBeVisible();
+
+    // F. Open an existing recruiting team (as its owner, Alex).
+    await page.goto("/demo");
+    await page.getByRole("button", { name: /^A Alex/ }).click();
+    await expect(page).toHaveURL(/\/spaces$/);
+    await page.goto(`/s/${slug}/teams`);
+    await page.getByRole("link", { name: /Campus Compass/ }).first().click();
+    await expect(page.getByTestId("team-capacity")).toHaveText("2 of 4 · 2 open positions");
+    await page.getByRole("link", { name: "Grow my team" }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${slug}/grow$`));
+
+    // G. Analyze missing roles and skills.
+    const gaps = page.getByTestId("gap-analysis");
+    await expect(gaps.getByText("Required roles not covered")).toBeVisible();
+    await expect(gaps.locator("dd").first()).toContainText("Backend");
+    await expect(gaps.locator("dd").first()).toContainText("Frontend");
+    await expect(gaps.getByText("Desired skills not covered")).toBeVisible();
+    await expect(page.getByTestId("grow-capacity")).toHaveText("2 accepted members · 2 open positions (team size 4)");
+
+    // H. Recommended students who fill those gaps, ranked by whole-team improvement.
+    const recs = page.getByTestId("grow-candidate");
+    await expect(recs.first()).toBeVisible();
+    await expect(recs.first().getByText(/Fills (Backend|Frontend) \(required\)/).first()).toBeVisible();
+    const gains = (await page.getByTestId("grow-gain").allInnerTexts()).map((t) => Number(t.replace("−", "-").replace(/[^0-9.+-]/g, "")));
+    expect(gains[0]).toBeGreaterThan(0);
+    expect([...gains].sort((a, b) => b - a)).toEqual(gains);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("grow"), fullPage: true });
+
+    // L. Alex cannot pull candidates for a team he doesn't recruit for.
+    const spaces = (await (await page.request.get("/api/spaces?q=")).json()).spaces as { id: string; slug: string }[];
+    const spaceId = spaces.find((x) => x.slug === slug)!.id;
+    await page.goto(`/s/${slug}/teams`);
+    const otherHref = await page.getByRole("link", { name: /Prompt Pilots/ }).getAttribute("href");
+    const otherTeam = /teams\/([0-9a-f-]{36})/.exec(otherHref!)![1];
+    const denied = await page.request.post(`/api/spaces/${spaceId}/match/recommend-members`, { headers, data: { team_id: otherTeam } });
+    expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe("NOT_RECRUITER");
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
   test("production users never see demo data", async ({ browser }, info) => {
     test.skip(!DEV_PASSWORD, "DEV_TEST_PASSWORD not set");
     const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };

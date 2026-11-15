@@ -61,11 +61,23 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
                 {space.recruiting_team_count > 0 ? ` · ${plural(Number(space.recruiting_team_count), "team")} recruiting` : ""}
               </p>
               <p className="mt-3 text-xs text-muted-foreground">
-                Each student chooses whether their profile is visible here. Smart Team Formation and member
-                recommendations are not available yet.
+                Each student chooses whether their profile is visible and whether they can be suggested.
               </p>
             </section>
           )}
+
+          <nav aria-label="Find your team" className="grid gap-3 sm:grid-cols-3">
+            {[
+              { href: `/s/${space.slug}/teams`, title: "Find a Team", body: "Browse teams that are recruiting in this Space." },
+              { href: `/s/${space.slug}/grow`, title: "Grow My Team", body: "See your team's gaps and who could fill them." },
+              { href: `/s/${space.slug}/smart`, title: "Smart Team Formation", body: "Let AI propose a complete, balanced team." },
+            ].map((c) => (
+              <Link key={c.href} href={c.href} className="rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
+                <span className="block font-medium">{c.title}</span>
+                <span className="mt-1 block text-sm text-muted-foreground">{c.body}</span>
+              </Link>
+            ))}
+          </nav>
 
           <section className="rounded-xl border bg-card p-5" aria-labelledby="team-heading">
             <div className="flex items-center justify-between gap-2">
