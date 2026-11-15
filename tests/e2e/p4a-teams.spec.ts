@@ -83,7 +83,7 @@ test.describe("P4-A Team Foundation", () => {
     await expect(dev1.getByRole("heading", { level: 1 })).toHaveText(`Pixel Pushers ${tag}`);
     await expect(dev1.getByTestId("team-capacity")).toHaveText("1 of 3 · 2 open positions");
     await expect(dev1.getByRole("listitem").filter({ hasText: "Owner" })).toHaveCount(1);
-    await expect(dev1.getByText("Draft", { exact: true })).toBeVisible();
+    await expect(dev1.getByTestId("team-badges")).toContainText("Draft");
     await expect(dev1.getByText("Recruiting · 2 open")).toBeVisible();
 
     // C. Requirements persist (reload).

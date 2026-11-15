@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Plus, Sparkles, UsersRound } from "lucide-react";
+import { Info, Plus, Sparkles, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeltaChip, DimensionBars, FitHeadline, RoleCoverage, ScheduleSummary, SkillChips } from "@/components/match/fit";
 import { MemberCard } from "@/components/match/member-card";
+import { InviteCandidateButton } from "@/components/invite/invitation-actions";
 import { SpaceHeader } from "@/components/space/space-header";
 import { ApiError } from "@/lib/api/errors";
 import { loadPool, matchParamsSchema, recommendMembers, type RecommendResponse } from "@/lib/matching/service";
@@ -68,6 +69,7 @@ export default async function GrowMyTeamPage({ params }: PageProps<"/s/[slug]/gr
   }
 
   const { current, missing, candidates } = result;
+  const pending = Math.max(result.target_size - current.members.length - result.open_slots, 0);
   const noGaps = missing.must_roles.length + missing.preferred_roles.length + missing.skills.length === 0 && !missing.shared_hours.short;
 
   return (
@@ -78,7 +80,8 @@ export default async function GrowMyTeamPage({ params }: PageProps<"/s/[slug]/gr
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Grow My Team</p>
           <h2 className="text-xl font-semibold">{myTeam.name}</h2>
           <p className="mt-1 text-sm text-muted-foreground" data-testid="grow-capacity">
-            {current.members.length} accepted member{current.members.length === 1 ? "" : "s"} · {result.open_slots} open position{result.open_slots === 1 ? "" : "s"} (team size {result.target_size})
+            {current.members.length} accepted member{current.members.length === 1 ? "" : "s"}
+            {pending > 0 ? ` · ${pending} invited` : ""} · {result.open_slots} open position{result.open_slots === 1 ? "" : "s"} (team size {result.target_size})
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -132,7 +135,9 @@ export default async function GrowMyTeamPage({ params }: PageProps<"/s/[slug]/gr
             </p>
             {result.open_slots === 0 ? (
               <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-                Your team has no open positions. Add open positions on the team page to get recommendations.
+                {pending > 0
+                  ? `Every open position is reserved by a pending invitation (${pending}). If someone declines, their seat opens again and new recommendations appear here.`
+                  : "Your team has no open positions. Add open positions on the team page to get recommendations."}
               </p>
             ) : candidates.length === 0 ? (
               <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground" data-testid="grow-empty">
@@ -146,10 +151,13 @@ export default async function GrowMyTeamPage({ params }: PageProps<"/s/[slug]/gr
                       member={c.candidate}
                       actions={
                         <div className="flex w-full flex-col gap-2 border-t pt-3">
-                          <p className="flex flex-wrap items-center gap-2 text-sm">
-                            Team fit {current.score.toFixed(3)} → {c.score_after.toFixed(3)}
-                            <DeltaChip value={c.gain} digits={3} testId="grow-gain" />
-                          </p>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="flex flex-wrap items-center gap-2 text-sm">
+                              Team fit {current.score.toFixed(3)} → {c.score_after.toFixed(3)}
+                              <DeltaChip value={c.gain} digits={3} testId="grow-gain" />
+                            </p>
+                            <InviteCandidateButton teamId={myTeam.id} userId={c.candidate.id} name={c.candidate.name} />
+                          </div>
                           <div className="flex flex-wrap gap-1">
                             {c.fills_roles.map((f) => (
                               <Badge key={f.role} variant="outline" className="border-primary/40 bg-primary/10 font-normal text-primary">
@@ -176,9 +184,14 @@ export default async function GrowMyTeamPage({ params }: PageProps<"/s/[slug]/gr
                 ))}
               </ul>
             )}
-            <p className="mt-4 flex items-center gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-              <ArrowRight className="size-4 shrink-0" aria-hidden />
-              Inviting candidates arrives in the next update. Nothing has been sent.
+            <p className="mt-4 flex gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+              Inviting reserves an open position for 48 hours. Students who decline aren&apos;t suggested to this team again; your accepted members always stay.
+              {result.team?.id && (
+                <Link href={`/s/${slug}/teams/${myTeam.id}`} className="ml-auto shrink-0 text-primary underline-offset-4 hover:underline">
+                  Invitation status
+                </Link>
+              )}
             </p>
           </section>
         </div>

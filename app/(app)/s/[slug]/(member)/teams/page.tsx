@@ -53,8 +53,15 @@ export default async function SpaceTeamsPage({ params }: PageProps<"/s/[slug]/te
       </section>
 
       <section aria-labelledby="recruiting-teams">
-        <h2 id="recruiting-teams" className="mb-1 text-lg font-semibold">Recruiting teams</h2>
-        <p className="mb-3 text-sm text-muted-foreground">Teams in this Space that are currently looking for members.</p>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 id="recruiting-teams" className="mb-1 text-lg font-semibold">Recruiting teams</h2>
+            <p className="text-sm text-muted-foreground">Teams in this Space that are currently looking for members.</p>
+          </div>
+          <Link href={`/s/${slug}/find`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Find a Team: filter &amp; rank by fit
+          </Link>
+        </div>
         {recruiting.length === 0 ? (
           <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
             No other teams are recruiting in this Space yet.

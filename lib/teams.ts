@@ -57,11 +57,11 @@ export async function teamDetail(teamId: string, viewerId: string) {
   const supabase = await createClient();
   const { data: team } = await supabase
     .from("teams")
-    .select(TEAM_COLUMNS + ", space_id, owner_id, created_at")
+    .select(TEAM_COLUMNS + ", space_id, owner_id, created_at, activation_mode")
     .eq("id", teamId)
     .maybeSingle();
   if (!team) return null;
-  const t = team as unknown as Row & { space_id: string; owner_id: string };
+  const t = team as unknown as Row & { space_id: string; owner_id: string; activation_mode: "auto" | "finalized" | null };
   const { data: rows } = await supabase
     .from("team_members")
     .select("user_id, role, can_recruit, status, joined_at")
@@ -85,7 +85,9 @@ export async function teamDetail(teamId: string, viewerId: string) {
     team: toSummary(t),
     spaceId: t.space_id,
     members,
+    activationMode: t.activation_mode,
     isMember: !!me,
+    isOwner: me?.role === "owner",
     canRecruit: !!me && (me.role === "owner" || me.can_recruit),
   };
 }

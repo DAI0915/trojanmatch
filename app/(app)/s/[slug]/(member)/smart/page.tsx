@@ -80,6 +80,7 @@ export default async function SmartTeamFormationPage({ params }: PageProps<"/s/[
           </section>
           <SmartFormation
             spaceId={space.id}
+            slug={slug}
             minSize={space.min_team_size}
             maxSize={space.max_team_size}
             presets={Object.entries(PRESETS).map(([key, p]) => ({ key, label: p.label }))}

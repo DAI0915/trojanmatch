@@ -13,7 +13,7 @@ import { roundParts, toTeamView, type TeamView } from "./view";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-type RawPerson = {
+export type RawPerson = {
   id: string; name: string; synthetic: boolean; skills: string[]; profile_roles: string[]; desired_roles: string[];
   interests: string[]; topics: string[]; experience: string | null; working_style: Person["style"] | null;
   availability: number[]; goal: string | null; timezone?: string;
@@ -29,7 +29,7 @@ type RawPool = {
   funnel: { others: number; on_a_team: number; eligible: number };
 };
 
-const toPerson = (r: RawPerson): Person => ({
+export const toPerson = (r: RawPerson): Person => ({
   id: r.id,
   name: r.name,
   synthetic: r.synthetic,

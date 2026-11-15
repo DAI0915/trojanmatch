@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Info, Loader2, Repeat2, Sparkles, UserX, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Info, Loader2, Repeat2, Send, Sparkles, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { ChipSelect } from "@/components/forms/chip-select";
@@ -24,6 +27,7 @@ type Change = { removed: string; added: string; delta: number; partDeltas: Recor
 
 export function SmartFormation({
   spaceId,
+  slug,
   minSize,
   maxSize,
   presets,
@@ -31,6 +35,7 @@ export function SmartFormation({
   team,
 }: {
   spaceId: string;
+  slug: string;
   minSize: number;
   maxSize: number;
   presets: Preset[];
@@ -52,6 +57,13 @@ export function SmartFormation({
   const [loading, setLoading] = useState(false);
   const [replace, setReplace] = useState<ReplaceResponse | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
+  const router = useRouter();
+  // Invitations are only ever sent from this explicit selection + confirmation.
+  const [deselected, setDeselected] = useState<Set<string>>(new Set());
+  const [sendOpen, setSendOpen] = useState(false);
+  const [teamName, setTeamName] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
 
   const params = (exclude = excluded) => ({
     team_id: team?.id ?? null,
@@ -71,6 +83,7 @@ export function SmartFormation({
       setOption(0);
       setCurrent(res.proposals[0] ?? null);
       setChange(null);
+      setDeselected(new Set());
     } catch (err) {
       toast.error((err as ApiClientError).message);
     } finally {
@@ -108,6 +121,43 @@ export function SmartFormation({
   }
 
   const candidates = current?.members.filter((m) => m.kind === "candidate") ?? [];
+  const selected = candidates.filter((c) => !deselected.has(c.id));
+
+  async function sendInvites() {
+    if (!current || selected.length === 0) return;
+    setSending(true);
+    try {
+      const ids = selected.map((c) => c.id);
+      const res = team
+        ? await apiFetch<{ team_id: string }>(`/api/teams/${team.id}/invitations`, { method: "POST", json: { user_ids: ids, message } })
+        : await apiFetch<{ team_id: string }>(`/api/spaces/${spaceId}/invitations`, {
+            method: "POST",
+            json: {
+              user_ids: ids,
+              message,
+              team: {
+                name: teamName,
+                description: "",
+                open_positions: teamSize - 1,
+                recruiting: true,
+                requirements: { must_roles: mustRoles, min_shared_hours: minHours === "" ? null : Number(minHours) },
+              },
+            },
+          });
+      toast.success(`${ids.length} invitation${ids.length === 1 ? "" : "s"} sent. Each person decides whether to join.`);
+      setSendOpen(false);
+      router.push(`/s/${slug}/teams/${res.team_id}`);
+    } catch (err) {
+      const e = err as ApiClientError;
+      toast.error(e.message);
+      if (["INVITE_NO_LONGER_VALID", "DUPLICATE_PENDING", "TEAM_FULL"].includes(e.code)) {
+        setSendOpen(false);
+        void generate();
+      }
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -333,12 +383,74 @@ export function SmartFormation({
             </details>
           )}
 
-          <p className="flex items-center gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-            <ArrowRight className="size-4 shrink-0" aria-hidden />
-            Sending invitations to the candidates you choose arrives in the next update. Nothing has been sent and no team was created.
-          </p>
+          <section aria-labelledby="send-heading" data-testid="send-invites" className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h3 id="send-heading" className="font-medium">Invite this team</h3>
+              <fieldset className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                <legend className="sr-only">Who to invite</legend>
+                {candidates.map((c) => (
+                  <label key={c.id} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--primary)]"
+                      checked={!deselected.has(c.id)}
+                      onChange={(e) => {
+                        const next = new Set(deselected);
+                        if (e.target.checked) next.delete(c.id);
+                        else next.add(c.id);
+                        setDeselected(next);
+                      }}
+                    />
+                    {c.name}
+                  </label>
+                ))}
+              </fieldset>
+              <p className="mt-1 text-xs text-muted-foreground">Nothing is sent until you confirm. Invitations expire after 48 hours.</p>
+            </div>
+            <Button size="lg" onClick={() => setSendOpen(true)} disabled={selected.length === 0}>
+              <Send data-icon="inline-start" aria-hidden /> Send {selected.length} invitation{selected.length === 1 ? "" : "s"}
+            </Button>
+          </section>
         </section>
       )}
+
+      <Dialog open={sendOpen} onOpenChange={setSendOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send {selected.length} invitation{selected.length === 1 ? "" : "s"}?</DialogTitle>
+            <DialogDescription>
+              {team
+                ? `They're invited to “${team.name}”. Each person joins only if they accept.`
+                : `This creates your team (you're the owner) and invites the people below. Each person joins only if they accept.`}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="list-disc pl-5 text-sm" aria-label="Invitees">
+            {selected.map((c) => (
+              <li key={c.id}>{c.name}</li>
+            ))}
+          </ul>
+          {!team && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="new-team-name" className="text-sm font-medium">Team name</label>
+              <input id="new-team-name" className={inputClass} value={teamName} maxLength={60} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Trojan Builders" />
+              <p className="text-xs text-muted-foreground">Team size {teamSize}: you + {teamSize - 1} open positions.</p>
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="invite-message" className="text-sm font-medium">
+              Message <span className="font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Textarea id="invite-message" maxLength={280} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Why you'd like to team up." />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendOpen(false)}>Cancel</Button>
+            <Button onClick={sendInvites} disabled={sending || (!team && teamName.trim().length < 2)}>
+              {sending ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Send data-icon="inline-start" aria-hidden />}
+              Send invitations
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={replace !== null} onOpenChange={(o) => !o && setReplace(null)}>
         <SheetContent side="right" className="w-full overflow-y-auto p-4 sm:max-w-md">

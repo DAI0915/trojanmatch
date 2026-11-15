@@ -202,7 +202,7 @@ test.describe("P3 presenter demo sandbox", () => {
     await page.screenshot({ path: `test-results/screens/p4a-demo-teams-${info.project.name}.png`, fullPage: true });
     await page.getByRole("link", { name: /Prompt Pilots/ }).click();
     await expect(page.getByTestId("team-capacity")).toHaveText("2 of 4 · 2 open positions");
-    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("team-badges")).toContainText("Active");
     await expect(page.getByText("Synthetic").first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit team" })).toHaveCount(0);
 
@@ -335,6 +335,214 @@ test.describe("P3 presenter demo sandbox", () => {
     const denied = await page.request.post(`/api/spaces/${spaceId}/match/recommend-members`, { headers, data: { team_id: otherTeam } });
     expect(denied.status()).toBe(403);
     expect((await denied.json()).error.code).toBe("NOT_RECRUITER");
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
+  test("P5 A–I: invite → accept / decline → active → Find a Team request → reset", async ({ browser }, info) => {
+    test.setTimeout(300_000);
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/p5-${n}-${info.project.name}.png`;
+    // Desktop: Alex declines and Jordan invites a replacement. Mobile: Alex accepts (team fills up).
+    const alexAccepts = info.project.name === "demo-mobile";
+    const { context, page } = await startDemo(browser, viewport);
+    const headers = { origin: new URL(page.url()).origin };
+    const banner = page.getByRole("status").filter({ hasText: "Demo Mode" });
+    const switchTo = async (button: RegExp, fullName: string) => {
+      await page.goto("/demo");
+      await page.getByRole("button", { name: button }).click();
+      await expect(page).toHaveURL(/\/spaces$/);
+      await expect(banner).toContainText(`You are ${fullName} (synthetic persona)`);
+    };
+
+    // Setup: TreeHacks 2027 created live; 6 synthetic students join (Maya, Priya and Alex arrive first).
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await page.getByRole("link", { name: "Create New Space" }).first().click();
+    await page.getByLabel("Official URL").fill("https://www.treehacks.com");
+    await page.getByLabel("Start date").fill("2027-02-14");
+    await page.getByLabel("End date").fill("2027-02-16");
+    await page.getByRole("button", { name: "Check for duplicates & create" }).click();
+    const different = page.getByRole("button", { name: "No, it's different. Create Space" });
+    await expect(page.getByText("Space created. You're its first participant.").first().or(different)).toBeVisible({ timeout: 20_000 });
+    if (await different.isVisible()) await different.click();
+    await expect(page).toHaveURL(/\/setup\?created=1/);
+    const slug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.getByRole("button", { name: "Save & continue" }).click();
+    await expect(page.getByTestId("participant-count")).toBeVisible();
+    await page.goto("/demo");
+    await page.getByLabel("Space", { exact: true }).selectOption({ label: "TreeHacks 2027 (1)" });
+    await page.getByLabel("How many").fill("6");
+    await page.getByRole("button", { name: "Simulate joins" }).click();
+    await expect(page.getByText("Simulated up to 6 synthetic participants joining.")).toBeVisible();
+
+    // A + B. Jordan (no team yet) asks Smart Team Formation: Maya, Priya and Alex are recommended.
+    await page.goto(`/s/${slug}/smart`);
+    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
+    const names = page.locator('[data-kind="candidate"]').getByTestId("member-name");
+    await expect(names).toHaveCount(3);
+    expect((await names.allInnerTexts()).sort()).toEqual(["Alex Morgan", "Maya Chen", "Priya Raman"]);
+    await expect(page.getByTestId("draft-status")).toHaveText("Draft proposal · nobody has been invited");
+
+    // C. Explicit Send Invites (creates the team "Trojan Builders" and invites all three).
+    const bar = page.getByTestId("send-invites");
+    await expect(bar.getByRole("checkbox")).toHaveCount(3);
+    await bar.getByRole("button", { name: "Send 3 invitations" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Send 3 invitations?" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Send invitations" })).toBeDisabled();
+    await dialog.getByLabel("Team name").fill("Trojan Builders");
+    await dialog.getByLabel(/Message/).fill("Let's build something for TreeHacks!");
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("send"), fullPage: false });
+    await dialog.getByRole("button", { name: "Send invitations" }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${slug}/teams/[0-9a-f-]{36}$`), { timeout: 20_000 });
+    const teamUrl = new URL(page.url()).pathname;
+    const teamId = teamUrl.split("/").pop()!;
+    await expect(page.getByTestId("team-badges")).toContainText("Forming");
+    await expect(page.getByTestId("pending-invitation")).toHaveCount(3);
+    await expect(page.getByTestId("status-hint")).toContainText("Becomes Active when at least 2 members have accepted (now 1)");
+    await expect(page.getByTestId("team-capacity")).toHaveText("1 of 4 · 3 open positions");
+    await expect(page.getByTestId("team-reserved")).toHaveText("3 reserved by pending invitations");
+    // No seat left: nothing more can be sent, and tampered ids are rejected server-side.
+    const extra = await page.request.post(`/api/teams/${teamId}/invitations`, { headers, data: { user_ids: [crypto.randomUUID()] } });
+    expect(extra.status()).toBe(409);
+    expect((await extra.json()).error.code).toBe("TEAM_FULL");
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("forming"), fullPage: true });
+
+    // D. Maya accepts.
+    await switchTo(/^M Maya/, "Maya Chen");
+    await page.goto("/invitations");
+    const mayaInvite = page.getByTestId("incoming-invitation").filter({ hasText: "Trojan Builders" });
+    await expect(mayaInvite).toContainText("Jordan Lee invited you to join Trojan Builders.");
+    await expect(mayaInvite).toContainText("Let's build something for TreeHacks!");
+    await expect(mayaInvite).toContainText(/expires in (4[78]|4[0-9]) h|expires in 2 days/);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("inbox"), fullPage: true });
+    await mayaInvite.getByRole("button", { name: /^Accept/ }).click();
+    await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
+    await expect(page.getByTestId("member-list")).toContainText("Maya Chen");
+    await expect(page.getByTestId("team-badges")).toContainText("Forming");
+    // An answered invitation can't be answered again.
+    await page.goto("/invitations");
+    await expect(page.getByTestId("incoming-invitation")).toHaveCount(0);
+    await expect(page.getByTestId("history-row").filter({ hasText: "Trojan Builders" })).toContainText("accepted");
+
+    // E. Priya accepts.
+    await switchTo(/^P Priya/, "Priya Raman");
+    await page.goto("/invitations");
+    await page.getByTestId("incoming-invitation").filter({ hasText: "Trojan Builders" }).getByRole("button", { name: /^Accept/ }).click();
+    await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
+    await expect(page.getByTestId("team-capacity")).toHaveText("3 of 4 · 1 open position");
+    await expect(page.getByTestId("team-badges")).toContainText("Forming"); // Alex is still pending
+
+    // F. Alex answers.
+    await switchTo(/^A Alex/, "Alex Morgan");
+    await page.goto("/invitations");
+    const alexInvite = page.getByTestId("incoming-invitation").filter({ hasText: "Trojan Builders" });
+    if (alexAccepts) {
+      await alexInvite.getByRole("button", { name: /^Accept/ }).click();
+      await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
+    } else {
+      await alexInvite.getByRole("button", { name: /^Decline/ }).click();
+      await expect(page.getByText("You declined Trojan Builders's invitation.")).toBeVisible();
+      await expect(page.getByTestId("incoming-invitation")).toHaveCount(0);
+    }
+
+    // G. Jordan views the team status.
+    await switchTo(/^J Jordan/, "Jordan Lee");
+    await page.goto(teamUrl);
+    await expect(page.getByTestId("team-badges")).toContainText("Active");
+    await expect(page.getByTestId("status-hint")).toContainText("Activated automatically");
+    await expect(page.getByTestId("pending-invitations")).toContainText("Pending invitations (0)");
+    if (alexAccepts) {
+      await expect(page.getByTestId("team-capacity")).toHaveText("4 of 4 · 0 open positions");
+      await expect(page.getByTestId("team-badges")).toContainText("Not recruiting");
+      await expect(page.getByTestId("member-list")).toContainText("Alex Morgan");
+    } else {
+      await expect(page.getByTestId("team-capacity")).toHaveText("3 of 4 · 1 open position");
+      await expect(page.getByTestId("history-item").filter({ hasText: "Alex Morgan" })).toContainText("declined");
+      await expect(page.getByTestId("member-list")).toContainText("Maya Chen");
+      await expect(page.getByTestId("member-list")).toContainText("Priya Raman");
+      // Recompute alternatives and explicitly invite a replacement (Alex is not suggested again).
+      await page.getByTestId("replacement-callout").getByRole("link", { name: "Find a replacement" }).click();
+      await expect(page).toHaveURL(new RegExp(`/s/${slug}/grow$`));
+      const recs = page.getByTestId("grow-candidate");
+      await expect(recs.first()).toBeVisible();
+      await expect(recs.filter({ hasText: "Alex Morgan" })).toHaveCount(0);
+      const replacement = await recs.first().getByTestId("member-name").innerText();
+      await recs.first().getByRole("button", { name: `Invite ${replacement}` }).click();
+      await expect(page.getByText(`Invitation sent to ${replacement}.`)).toBeVisible();
+      await expect(page.getByTestId("grow-capacity")).toContainText("1 invited");
+      await page.goto(teamUrl);
+      await expect(page.getByTestId("pending-invitation")).toHaveCount(1);
+      await expect(page.getByTestId("pending-invitation")).toContainText(replacement);
+      await expect(page.getByTestId("team-badges")).toContainText("Active"); // stays active while growing
+    }
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("active"), fullPage: true });
+
+    // H. Find a Team in AI@USC (Jordan has no team there): ranked by fit, request to join, owner accepts.
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const aiSlug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.getByRole("link", { name: /^Find a Team/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${aiSlug}/find$`));
+    await expect(page.getByTestId("find-count")).toContainText("Recommended for you");
+    const results = page.getByTestId("find-team");
+    await expect(results.first().getByTestId("find-fit")).toContainText("Fit with you");
+    expect(await results.count()).toBeGreaterThanOrEqual(3);
+    // DB-backed filter: teams looking for a backend developer.
+    await page.getByLabel("Looking for role").selectOption({ label: "Backend" });
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL(/role=backend/);
+    await expect(results.filter({ hasText: "Campus Compass" })).toHaveCount(1);
+    await expect(results.filter({ hasText: "Prompt Pilots" })).toHaveCount(0);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("find"), fullPage: true });
+    const compass = results.filter({ hasText: "Campus Compass" });
+    await compass.getByRole("button", { name: "Request to join Campus Compass" }).click();
+    await page.getByRole("dialog").getByLabel(/Note to the team/).fill("Full-stack: I can own the backend and frontend.");
+    await page.getByRole("dialog").getByRole("button", { name: "Send request" }).click();
+    await expect(page.getByText("Request sent to Campus Compass.")).toBeVisible();
+    await expect(compass.getByTestId("request-pending")).toBeVisible();
+    // Duplicate request is refused by the database.
+    const compassId = /teams\/([0-9a-f-]{36})/.exec((await compass.getByRole("link", { name: "View team" }).getAttribute("href"))!)![1];
+    const dup = await page.request.post(`/api/teams/${compassId}/requests`, { headers, data: {} });
+    expect(dup.status()).toBe(409);
+    expect((await dup.json()).error.code).toBe("DUPLICATE_PENDING");
+    await page.goto("/invitations");
+    await expect(page.getByTestId("my-request").filter({ hasText: "Campus Compass" })).toBeVisible();
+
+    await switchTo(/^A Alex/, "Alex Morgan");
+    await page.goto("/invitations");
+    const request = page.getByTestId("team-request").filter({ hasText: "Jordan Lee" });
+    await expect(request).toContainText("Full-stack: I can own the backend and frontend.");
+    await request.getByRole("button", { name: /^Accept/ }).click();
+    await expect(page.getByText("Jordan Lee joined Campus Compass.")).toBeVisible();
+    await page.goto(`/s/${aiSlug}/teams/${compassId}`);
+    await expect(page.getByTestId("team-capacity")).toHaveText("3 of 4 · 1 open position");
+    await expect(page.getByTestId("member-list")).toContainText("Jordan Lee");
+
+    // I. Reset restores the seeded state: no TreeHacks 2027, no invitations, Campus Compass back to 2 of 4.
+    const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
+    expect(reset.status()).toBe(200);
+    await switchTo(/^J Jordan/, "Jordan Lee");
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await page.goto("/invitations");
+    await expect(page.getByRole("heading", { name: "No pending invitations" })).toBeVisible();
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const freshSlug = /\/s\/([a-z0-9-]+)\//.exec(page.url())![1];
+    await page.goto(`/s/${freshSlug}/teams`);
+    await expect(page.getByRole("heading", { name: "You're not on a team in this Space" })).toBeVisible();
+    await page.getByRole("link", { name: /Campus Compass/ }).first().click();
+    await expect(page.getByTestId("team-capacity")).toHaveText("2 of 4 · 2 open positions");
 
     await page.request.post("/api/demo/end", { headers, data: {} });
     await context.close();

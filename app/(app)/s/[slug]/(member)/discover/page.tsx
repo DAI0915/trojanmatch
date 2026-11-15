@@ -68,7 +68,7 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
 
           <nav aria-label="Find your team" className="grid gap-3 sm:grid-cols-3">
             {[
-              { href: `/s/${space.slug}/teams`, title: "Find a Team", body: "Browse teams that are recruiting in this Space." },
+              { href: `/s/${space.slug}/find`, title: "Find a Team", body: "Recruiting teams ranked by fit with you. Request to join." },
               { href: `/s/${space.slug}/grow`, title: "Grow My Team", body: "See your team's gaps and who could fill them." },
               { href: `/s/${space.slug}/smart`, title: "Smart Team Formation", body: "Let AI propose a complete, balanced team." },
             ].map((c) => (
