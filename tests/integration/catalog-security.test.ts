@@ -24,12 +24,16 @@ const AUTHENTICATED_EXECUTE_ALLOWLIST = [
   "private.valid_hours",
 ];
 
-// Our own (non-extension) functions in public/private.
+// Our own (non-extension) callable functions in public/private. Event-trigger
+// functions are excluded: Postgres refuses direct calls to them and PostgREST
+// never exposes them (e.g. Supabase's platform-managed public.rls_auto_enable,
+// which auto-enables RLS on new tables in hosted projects).
 const OWN_FUNCTIONS_SQL = `
   select p.oid, n.nspname || '.' || p.proname as name, p.prosecdef, p.proconfig, p.proacl
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname in ('public', 'private')
+    and p.prorettype <> 'event_trigger'::regtype
     and not exists (
       select 1 from pg_depend d
       where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e'
