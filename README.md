@@ -38,3 +38,14 @@ npx playwright test        # browser checks at 1440px and 375px
 - Email confirmation is ON. Public sign-up stays disabled (`PUBLIC_SIGNUP_ENABLED=false`)
   until custom SMTP is configured. A confirmed email is never presented as proof of
   student status.
+
+## Deployment
+- Production: https://trojanmatch-jade.vercel.app (Vercel project `trojanmatch`, Next.js preset via `vercel.json`)
+- Database: Supabase project `qhfmvsfnhdqfupvggzco` (Postgres 17). Migrations: `npx supabase db push --remote`
+  (always `--dry-run` first). Auth settings for production live in `[remotes.production]` in
+  `supabase/config.toml`; review `npx supabase config diff` before `config push`.
+- Production env (Vercel): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`,
+  `PUBLIC_SIGNUP_ENABLED=false`, `DEMO_MODE_ENABLED=false`. The service-role key is added only when a
+  server feature needs it (demo routes, P3).
+- Cloud verification: `npx tsx scripts/verify-cloud.ts` (anon key + dev-account sessions; read-only) and
+  `E2E_BASE_URL=https://trojanmatch-jade.vercel.app npx playwright test`.
