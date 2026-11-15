@@ -59,7 +59,11 @@ test.describe("P1 — auth & shell @smoke", () => {
     }
     await page.getByRole("link", { name: "My Teams" }).click();
     await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
-    await expect(page.getByText("Creating a Space never creates a team.")).toBeVisible();
+    // Fresh accounts see the empty state; accounts that already own teams (persistent
+    // environments) see their team list instead. Either is correct.
+    await expect(
+      page.getByText("Creating a Space never creates a team.").or(page.getByRole("main").getByRole("listitem").first()),
+    ).toBeVisible();
 
     // Own profile via API (session-derived identity).
     const api = await page.request.get("/api/profile");

@@ -139,3 +139,11 @@ Shell notes: the shell is zsh (unquoted `$VAR` holding a command is not word-spl
 - `send_invitations` should re-validate with the same rules as `get_match_pool` (consent, membership, capacity incl. pending) and may accept the candidate ids from a Smart/Grow proposal.
 - Capacity trigger `team_members_enforce_capacity` and the one-team-per-Space unique index already protect acceptance races.
 - Seeded demo teams are `active`/`draft`; `forming` appears once invitations exist.
+
+## 7. Deployment record (completed Sat 2026-11-14 ~22:00 PST)
+- Migration `20261114000008_matching.sql` applied to Supabase `qhfmvsfnhdqfupvggzco` after a dry run listing only that file (two functions + grants, no data writes). Cloud audit: no violations; schema linter clean; `get_match_pool` is `STABLE`, `search_path=""`, executable by `authenticated` only.
+- Cloud demo sandbox (slot 0) re-seeded: 44 personas, 3 Spaces, 54 participations, 5 teams.
+- Deployed to Vercel project `trojanmatch` (deployment `trojanmatch-h7k4q3qd7`) at https://trojanmatch-jade.vercel.app. `my-portfolio` untouched.
+- Production browser tests at 1440px and 375px: demo suite 11 passed / 1 skipped by design (includes the P4-B A–H flow), P1 14/14, P4-A 2/2; cloud permissions probe all pass.
+- Production data digests (Spaces, participations, profiles, teams, members, production users' rate-limit events) were identical to the pre-deployment baseline; the only additions were two tagged test Spaces/teams created on purpose by the P4-A regression run (tag `Exxvvao`). Existing tagged test Spaces were not deleted.
+- Test-only fix: `tests/e2e/p1-auth-shell.spec.ts` now accepts either the empty My Teams state or a team list (dev1 owns tagged teams in production, which the old assertion did not expect).
