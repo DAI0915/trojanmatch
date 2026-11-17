@@ -1,7 +1,7 @@
 /**
  * The recruiter journey, exactly as a first-time visitor would click it:
  * landing → Try Interactive Demo → guide → Smart Team → compare → Replace →
- * invite → switch persona from the demo bar → accept → Active → chat → Kickoff.
+ * invite → "Switch to <invitee>" prompt → accept → Active → chat → Kickoff.
  * Plus: two visitors at once, idle expiry, and the demo Gemini budget.
  * Runs at 1440px and 375px (demo-desktop / demo-mobile projects).
  */
@@ -25,14 +25,36 @@ async function visitor(browser: Browser, viewport: { width: number; height: numb
 
 const bar = (page: Page) => page.getByTestId("demo-bar");
 
-/** Switch persona from the yellow demo bar (featured persona or "Act as <invitee>"). */
-async function switchFromBar(page: Page, name: string) {
-  await bar(page).getByRole("button", { name: /Switch persona/ }).click();
-  const menu = page.getByRole("menu");
-  const featured = menu.getByRole("menuitem").filter({ hasText: name });
-  await featured.first().click();
+const FEATURED = ["Jordan Lee", "Maya Chen", "Priya Raman", "Alex Morgan"];
+
+/** Open "Switch student" in the yellow demo bar (the searchable picker of all 44 students). */
+async function openPicker(page: Page) {
+  await bar(page).getByTestId("switch-student").click();
+  const picker = page.getByTestId("student-picker");
+  await expect(picker).toBeVisible();
+  await expect(picker).toHaveCSS("opacity", "1");
+  return picker;
+}
+
+/** Switch student from the picker, optionally by searching first. */
+async function switchFromBar(page: Page, name: string, search = false) {
+  const picker = await openPicker(page);
+  if (search) await picker.getByLabel("Search students").fill(name.split(" ")[0]);
+  await picker.getByRole("button", { name: `Switch to ${name}` }).first().click();
   await expect(bar(page)).toContainText(`You are ${name}`, { timeout: 20_000 });
   await page.waitForLoadState("networkidle"); // full page load: let it hydrate before the next click
+}
+
+/** As an invitee (now on /invitations): accept the demo team's invitation. */
+async function acceptAs(page: Page, name: string, teamUrl: string) {
+  await expect(page).toHaveURL(/\/invitations$/, { timeout: 20_000 });
+  await expect(bar(page)).toContainText(`You are ${name}`);
+  await expect(page.getByTestId("demo-hint-incoming")).toBeVisible();
+  await page.waitForLoadState("networkidle"); // switching is a full page load: wait for hydration
+  const invite = page.getByTestId("incoming-invitation").filter({ hasText: "Recruiter Demo Team" });
+  await invite.getByRole("button", { name: /^Accept/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
+  await page.waitForLoadState("networkidle");
 }
 
 test.describe("Recruiter demo journey", () => {
@@ -104,28 +126,38 @@ test.describe("Recruiter demo journey", () => {
     const teamId = teamUrl.split("/").pop()!;
     await expect(page.getByTestId("team-badges")).toContainText("Forming");
 
-    // 6. Accept as each invitee, switching persona from the demo bar.
-    for (const name of invitees) {
-      await page.goto("/spaces");
-      // Invitees are listed for the inviting team's owner (Jordan).
-      if (!(await bar(page).innerText()).includes("You are Jordan Lee")) await switchFromBar(page, "Jordan Lee");
-      await bar(page).getByRole("button", { name: /Switch persona/ }).click();
-      const menu = page.getByRole("menu");
-      const item = menu.getByRole("menuitem").filter({ hasText: name });
-      await expect(item.first()).toBeVisible();
-      if (name === invitees[0]) {
-        await expect(menu).toHaveCSS("opacity", "1");
-        await page.screenshot({ path: shot("switcher"), fullPage: false });
-      }
-      await item.first().click();
-      await expect(page).toHaveURL(/\/invitations$/, { timeout: 20_000 });
-      await expect(bar(page)).toContainText(`You are ${name}`);
-      // Switching is a full page load: wait for hydration so the click reaches React's handler.
-      await page.waitForLoadState("networkidle");
-      const invite = page.getByTestId("incoming-invitation").filter({ hasText: "Recruiter Demo Team" });
-      await invite.getByRole("button", { name: /^Accept/ }).click();
-      await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
-    }
+    // Smart Match recommends students outside the four quick-access personas.
+    expect(invitees.some((n) => !FEATURED.includes(n)), `invitees: ${invitees.join(", ")}`).toBe(true);
+
+    // 6. Accept as each invitee. Three ways in, all without instructions:
+    //    a) the "Next: accept as your invitees" prompt right after sending,
+    await page.waitForLoadState("networkidle");
+    const next = page.getByTestId("demo-next-step");
+    await expect(next).toBeVisible();
+    for (const n of invitees) await expect(next.getByRole("button", { name: `Switch to ${n}` })).toBeVisible();
+    await expect(bar(page).getByTestId("demo-hint-invited")).toBeVisible();
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("next-step"), fullPage: false });
+    await next.getByRole("button", { name: `Switch to ${invitees[0]}` }).click();
+    await acceptAs(page, invitees[0], teamUrl);
+
+    //    b) the searchable "Switch student" picker (invitees listed first),
+    const picker = await openPicker(page);
+    const invitedGroup = picker.getByRole("region", { name: "Invited, waiting for an answer" });
+    await expect(invitedGroup.getByRole("button", { name: `Switch to ${invitees[1]}` })).toBeVisible();
+    await expect(invitedGroup.getByRole("button", { name: `Switch to ${invitees[2]}` })).toBeVisible();
+    await expect(picker.getByRole("region", { name: "Your team" }).getByRole("button", { name: "Switch to Jordan Lee" })).toBeVisible();
+    await page.screenshot({ path: shot("switcher"), fullPage: false });
+    await picker.getByLabel("Search students").fill(invitees[1].split(" ")[1]);
+    await expect(picker.getByRole("button", { name: /^Switch to / }).first()).toHaveAccessibleName(`Switch to ${invitees[1]}`);
+    await picker.getByRole("button", { name: `Switch to ${invitees[1]}` }).first().click();
+    await acceptAs(page, invitees[1], teamUrl);
+
+    //    c) the persistent hint in the demo bar.
+    const hint = bar(page).getByTestId("demo-hint-invited");
+    await hint.getByRole("button", { name: `Switch to ${invitees[2]}` }).click();
+    await acceptAs(page, invitees[2], teamUrl);
+    await expect(page.getByTestId("demo-next-step")).toHaveCount(0);
     await expect(page.getByTestId("team-badges")).toContainText("Active");
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("active"), fullPage: true });
@@ -168,6 +200,56 @@ test.describe("Recruiter demo journey", () => {
       const sixth = await page.request.post(`/api/teams/${teamId}/kickoff`, { headers, data: {} });
       expect(sixth.status()).toBe(429);
     }
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
+  test("switch to any of the 44 synthetic students: searchable, current persona shown, own sandbox only", async ({ browser }, info) => {
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/recruiter-${n}-${info.project.name}.png`;
+    const { context, page } = await visitor(browser, viewport);
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Try Interactive Demo" }).click();
+    await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+    const headers = { origin: new URL(page.url()).origin };
+    const guide = page.getByTestId("demo-guide");
+    // The guide introduces switching before it's needed.
+    await expect(guide.getByRole("listitem").first()).toContainText("You play every student");
+    await guide.getByRole("button", { name: "Start exploring" }).click();
+    await expect(guide).toHaveCount(0);
+    await page.waitForLoadState("networkidle");
+    await expect(bar(page).getByTestId("current-persona")).toHaveText("Jordan Lee");
+
+    // Quick access (4) + everyone else (40) = all 44, with the current persona marked.
+    let picker = await openPicker(page);
+    const quick = picker.getByRole("region", { name: "Quick access" });
+    await expect(quick.getByRole("button")).toHaveCount(4);
+    await expect(quick.getByRole("button", { name: "Jordan Lee (current)" })).toBeDisabled();
+    await expect(picker.getByRole("region", { name: "All students in your sandbox" }).getByRole("button")).toHaveCount(40);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("picker"), fullPage: false });
+
+    // Search reaches a student outside the four.
+    await picker.getByLabel("Search students").fill("nora");
+    await expect(picker.getByRole("button", { name: /^Switch to / })).toHaveCount(1);
+    await picker.getByRole("button", { name: "Switch to Nora Ali" }).click();
+    await expect(page).toHaveURL(/\/spaces$/, { timeout: 20_000 });
+    await expect(bar(page).getByTestId("current-persona")).toHaveText("Nora Ali");
+    await page.waitForLoadState("networkidle");
+    picker = await openPicker(page);
+    await expect(picker.getByRole("button", { name: "Nora Ali (current)" })).toBeDisabled();
+    await picker.getByLabel("Search students").fill("zzzz");
+    await expect(picker.getByText("No student matches")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // The server still decides: unknown keys and foreign user ids are refused.
+    const sw = (data: object) => page.request.post("/api/demo/switch", { headers, data });
+    expect((await sw({ persona: "not_a_persona" })).status()).toBe(400);
+    expect((await sw({ userId: "00000000-0000-4000-8000-000000000000" })).status()).toBe(400);
+    expect((await sw({ persona: "nora", slot: 0 })).status()).toBe(200); // extra fields can't pick a slot
+    const me = (await (await page.request.get("/api/profile")).json()).profile as { scope?: string; display_name: string };
+    expect(me.display_name).toBe("Nora Ali");
 
     await page.request.post("/api/demo/end", { headers, data: {} });
     await context.close();

@@ -19,8 +19,10 @@ Demo** and gets their **own** sandbox.
    idle sessions are signed out and redirected to `/demo?expired=1`.
 3. `switch`, `reset` (restart), `simulate-joins` and `end` all need an active lease, and act only on
    the lease's slot.
-   - `switch` accepts a featured persona key, or a user id that resolves (via the Auth admin API) to
-     a synthetic persona **of the same slot**.
+   - `switch` accepts a persona key from the fixture allowlist (all 44 synthetic students), or a user id
+     that resolves (via the Auth admin API) to a synthetic persona **of the same slot**. The email is
+     always derived from the key and the lease's slot, so neither form can reach another sandbox or a
+     production account.
    - `reset` restores the slot, renews the lease and signs in as Jordan again.
 4. AI Kickoff calls `demo_ai_quota_take()` before Gemini.
    - Demo users get 4 Gemini kickoffs per visitor lease per hour, and 60 across all demo sandboxes
@@ -30,6 +32,20 @@ Demo** and gets their **own** sandbox.
 Lease lifetime: hard expiry at `DEMO_LEASE_MINUTES` (default 60), and an idle timeout of 30 minutes.
 Expired or idle slots are reclaimed by the next visitor, whose start resets the slot. That reset is
 the cleanup step.
+
+## Switching students (UI)
+
+- **Switch student** (yellow demo bar, every page) opens a searchable picker: *Invited, waiting for an
+  answer* → *Your team* → *Quick access* (Jordan, Maya, Priya, Alex) → *All students in your sandbox*.
+  The current persona is marked and disabled.
+- After invitations are sent, the team page shows **Next: accept as your invitees** with a
+  "Switch to <name>" button per invitee, and the demo bar shows the same next step on every page.
+  An invitee sees "<name> has an invitation waiting → Review invitations".
+- Data: the full list is the static synthetic fixture (keys, names, role labels only). Invitees and
+  teammates come from the current persona's own RLS-bound queries, so no service role is used to render
+  the picker and nothing outside the visitor's sandbox is visible.
+- Restart/end is a separate, smaller link at the far end of the bar ("Restart or end demo" → `/demo`,
+  with a confirmation).
 
 ## Database changes (migration `20261116000011_public_demo_pool.sql`)
 

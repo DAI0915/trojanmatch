@@ -40,7 +40,7 @@ export function DemoControls({ currentPersona, spaces }: { currentPersona: strin
           <Users className="size-4 text-primary" aria-hidden /> Switch persona
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          All personas are synthetic and live in your private sandbox. You can also switch from the yellow demo bar.
+          Quick access to four personas. To act as any of the 44 synthetic students in your private sandbox, use Switch student in the yellow demo bar.
         </p>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {SWITCHABLE_PERSONAS.map((p) => {

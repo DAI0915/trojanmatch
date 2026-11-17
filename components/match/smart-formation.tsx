@@ -147,6 +147,7 @@ export function SmartFormation({
       toast.success(`${ids.length} invitation${ids.length === 1 ? "" : "s"} sent. Each person decides whether to join.`);
       setSendOpen(false);
       router.push(`/s/${slug}/teams/${res.team_id}`);
+      router.refresh(); // also re-render shared layouts (inbox counts, demo bar)
     } catch (err) {
       const e = err as ApiClientError;
       toast.error(e.message);

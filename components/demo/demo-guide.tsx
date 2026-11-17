@@ -2,32 +2,32 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BookOpen, Inbox, MessagesSquare, Repeat2, Sparkles, Trophy } from "lucide-react";
+import { ArrowRight, BookOpen, Inbox, MessagesSquare, Repeat2, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const STEPS = [
   {
-    icon: Trophy,
-    title: "Open a Matching Space",
-    body: "Jordan has already joined AI@USC Hackathon 2026, a Space with 32 synthetic students.",
-    href: "/spaces?type=hackathon&q=AI%40USC",
-    cta: "Find the Space",
+    icon: Users,
+    title: "You play every student",
+    body: "You start as Jordan Lee. Switch student in the yellow bar lets you act as any of the 44 synthetic students in your sandbox: send invitations as Jordan, then accept them as the people you invited.",
   },
   {
     icon: Sparkles,
     title: "Generate a Smart Team",
-    body: "Open Smart Match → Generate recommended team. Every possible team is scored deterministically, then expand “Compare with simple individual ranking”.",
+    body: "Open AI@USC Hackathon 2026 → Smart Team Formation → Generate recommended team. Every possible team is scored deterministically; expand “Compare with simple individual ranking”.",
+    href: "/spaces?type=hackathon&q=AI%40USC",
+    cta: "Find the Space",
   },
   {
     icon: Repeat2,
     title: "Replace and invite",
-    body: "Use Replace to swap a candidate (try Maya Chen or Priya Raman), then Send invitations. Nothing is sent until you confirm.",
+    body: "Use Replace to swap a candidate, then Send invitations. Nothing is sent until you confirm.",
   },
   {
     icon: Inbox,
-    title: "Accept as a teammate",
-    body: "In the yellow demo bar, choose Switch persona and pick someone you invited. Accept in Invitations; the team turns Active when everyone answers.",
+    title: "Switch to an invitee and accept",
+    body: "Right after you send, a “Switch to …” button appears. Accept as each invitee; the team turns Active when everyone has answered.",
   },
   {
     icon: MessagesSquare,

@@ -28,8 +28,9 @@ goals, interests, overlapping availability and working style, and explains each 
    This is an illustrative example, not a measured result.
 4. **Replace** a candidate (the score is recomputed instantly), then **Send invitations**.
    Nothing is sent until you confirm.
-5. Use **Switch persona** in the yellow demo bar to become an invitee and **Accept**.
-   The team turns **Active** when everyone has answered.
+5. You play every student. Right after sending, a **Switch to <invitee>** prompt appears; accept as each
+   invitee. **Switch student** in the yellow demo bar lets you act as any of the 44 synthetic students
+   (invitees and teammates first, then a searchable list). The team turns **Active** when everyone has answered.
 6. Open the **team workspace** for real-time chat, then **AI Kickoff**. Gemini writes project ideas,
    suggested roles and first steps from the team's consented profiles. It never changes scores.
 

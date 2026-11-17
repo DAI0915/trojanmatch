@@ -104,3 +104,23 @@ describe("synthetic fixture", () => {
     expect(new Set(jordan).size).toBe(2);
   });
 });
+
+describe("demo student directory (Switch student picker)", () => {
+  it("lists all 44 synthetic personas once, the four quick-access personas first", async () => {
+    const { demoDirectory } = await import("@/lib/demo/directory");
+    const dir = demoDirectory();
+    expect(dir).toHaveLength(DEMO_PERSONAS.length);
+    expect(dir).toHaveLength(44);
+    expect(new Set(dir.map((d) => d.key)).size).toBe(44);
+    expect(dir.slice(0, 4).map((d) => d.key)).toEqual(SWITCHABLE_PERSONAS.map((p) => p.key));
+    expect(dir.filter((d) => d.quick)).toHaveLength(4);
+    for (const d of dir) expect(DEMO_PERSONAS.some((p) => p.key === d.key && p.display_name === d.name)).toBe(true);
+  });
+
+  it("exposes only keys, names and labels: no emails, ids or secrets", async () => {
+    const { demoDirectory } = await import("@/lib/demo/directory");
+    const json = JSON.stringify(demoDirectory());
+    expect(json).not.toMatch(/@|\.invalid|password|[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    for (const d of demoDirectory()) expect(Object.keys(d).sort()).toEqual(["blurb", "key", "name", "quick", "roles"]);
+  });
+});

@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { CancelInvitationButton, FinalizeTeamButton, RequestToJoinButton } from "@/components/invite/invitation-actions";
 import { StatusTimeline, TeamInvitations } from "@/components/invite/team-invitations";
+import { DemoNextStep } from "@/components/demo/demo-next-step";
+import { parsePersonaEmail } from "@/lib/demo/personas";
 import { RequirementsView } from "@/components/team/requirements-view";
 import { RecruitingBadge, TeamStatusBadge } from "@/components/team/team-badges";
 import { expiresIn } from "@/lib/format";
@@ -32,6 +34,12 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
   const minNeeded = Math.max(space.min_team_size, 2);
   const spaceOpen = space.status === "open" && (!space.team_deadline_at || new Date(space.team_deadline_at) > new Date());
   const canFinalize = isOwner && spaceOpen && (team.status === "draft" || team.status === "forming") && team.members >= minNeeded;
+
+  // Demo: the visitor plays every student, so prompt them to become an invitee and accept.
+  const demoInvitees =
+    isMember && parsePersonaEmail(user!.email)
+      ? pendingInvites.flatMap((i) => (i.person.name ? [{ userId: i.person.id, name: i.person.name, team: team.name }] : []))
+      : [];
 
   // Visitors (not on this team): own pending request/invitation, and whether they may ask to join.
   const mine = !isMember ? await myOpenInvitation(team.id, user!.id) : null;
@@ -73,6 +81,7 @@ export default async function TeamDetailPage({ params }: PageProps<"/s/[slug]/te
         </div>
       </header>
 
+      <DemoNextStep people={demoInvitees} />
       {mine && (
         <section role="status" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4" data-testid="my-open-invitation">
           <p className="text-sm">

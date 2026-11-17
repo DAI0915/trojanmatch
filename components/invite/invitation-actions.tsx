@@ -50,6 +50,7 @@ export function RespondActions({
         );
         if (kind === "invite" && teamHref) {
           router.push(teamHref);
+          router.refresh(); // also re-render shared layouts (inbox counts, demo bar)
           return;
         }
       } else {
