@@ -32,6 +32,7 @@ async function switchFromBar(page: Page, name: string) {
   const featured = menu.getByRole("menuitem").filter({ hasText: name });
   await featured.first().click();
   await expect(bar(page)).toContainText(`You are ${name}`, { timeout: 20_000 });
+  await page.waitForLoadState("networkidle"); // full page load: let it hydrate before the next click
 }
 
 test.describe("Recruiter demo journey", () => {
@@ -119,6 +120,8 @@ test.describe("Recruiter demo journey", () => {
       await item.first().click();
       await expect(page).toHaveURL(/\/invitations$/, { timeout: 20_000 });
       await expect(bar(page)).toContainText(`You are ${name}`);
+      // Switching is a full page load: wait for hydration so the click reaches React's handler.
+      await page.waitForLoadState("networkidle");
       const invite = page.getByTestId("incoming-invitation").filter({ hasText: "Recruiter Demo Team" });
       await invite.getByRole("button", { name: /^Accept/ }).click();
       await expect(page).toHaveURL(new RegExp(`${teamUrl}$`), { timeout: 20_000 });
