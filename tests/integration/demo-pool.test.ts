@@ -169,7 +169,7 @@ describe("demo pool leases", () => {
     const { rows } = await db.query(`select last_seen_at > now() - interval '1 minute' as fresh from private.demo_slots where slot = $1`, [slot]);
     expect(rows[0].fresh).toBe(true); // touched
 
-    await db.query(`update private.demo_slots set last_seen_at = now() - interval '31 minutes' where slot = $1`, [slot]);
+    await db.query(`update private.demo_slots set last_seen_at = now() - interval '31 minutes', updated_at = now() - interval '31 minutes' where slot = $1`, [slot]);
     expect((await user.client.rpc("demo_lease_valid", { p_token_hash: hash(t) })).data).toBe(false);
 
     // Occupy the other two slots, then the idle one is handed to a new visitor.
@@ -191,6 +191,17 @@ describe("demo pool leases", () => {
     await db.query(`update private.demo_slots set leased_until = now() - interval '1 second' where slot = $1`, [slot]);
     expect((await admin.rpc("demo_check_lease", { p_slot: slot, p_token_hash: hash(t) })).data).toEqual({ valid: false });
     expect((await admin.rpc("demo_renew_lease", { p_slot: slot, p_token_hash: hash(t), p_minutes: 30 })).data).toEqual({ valid: false });
+  });
+
+  it("rollback safety: a legacy demo_start_lease on a slot with stale activity is immediately valid", async () => {
+    const slot = 19;
+    const user = people.get(slot)![0];
+    await db.query(`update private.demo_slots set last_seen_at = now() - interval '3 hours', updated_at = now() - interval '3 hours' where slot = $1`, [slot]);
+    const t = tok();
+    expect((await adminClient().rpc("demo_start_lease", { p_slot: slot, p_token_hash: hash(t), p_minutes: 30 })).error).toBeNull();
+    expect((await adminClient().rpc("demo_check_lease", { p_slot: slot, p_token_hash: hash(t) })).data).toMatchObject({ valid: true });
+    expect((await user.client.rpc("demo_lease_valid", { p_token_hash: hash(t) })).data).toBe(true);
+    await adminClient().rpc("demo_end_lease", { p_slot: slot, p_token_hash: hash(t) });
   });
 
   it("validates input", async () => {

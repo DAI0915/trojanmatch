@@ -23,6 +23,9 @@ alter table private.demo_slots
 
 -- A lease is ACTIVE while its token is set, it hasn't hit its hard expiry, and
 -- the visitor was seen in the last 30 minutes (idle sessions free the slot).
+-- Activity = the latest of last_seen_at (request touch) and updated_at (start /
+-- renew), so a lease started by the legacy demo_start_lease (which does not set
+-- last_seen_at) is never judged idle by a stale last_seen_at.
 create function private.demo_lease_active(d private.demo_slots)
 returns boolean
 language sql
@@ -32,7 +35,7 @@ as $$
   select d.lease_token_hash is not null
      and d.leased_until is not null
      and d.leased_until > pg_catalog.now()
-     and coalesce(d.last_seen_at, d.updated_at) > pg_catalog.now() - interval '30 minutes'
+     and greatest(d.last_seen_at, d.updated_at) > pg_catalog.now() - interval '30 minutes'
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ begin
   end if;
   return pg_catalog.jsonb_build_object(
     'valid', true, 'leased_until', v_d.leased_until, 'epoch', v_d.epoch,
-    'idle_until', coalesce(v_d.last_seen_at, v_d.updated_at) + interval '30 minutes');
+    'idle_until', greatest(v_d.last_seen_at, v_d.updated_at) + interval '30 minutes');
 end
 $$;
 
@@ -150,7 +153,7 @@ begin
    for update;
 
   if v_slot is null then
-    select pg_catalog.min(least(d.leased_until, coalesce(d.last_seen_at, d.updated_at) + interval '30 minutes'))
+    select pg_catalog.min(least(d.leased_until, greatest(d.last_seen_at, d.updated_at) + interval '30 minutes'))
       into v_retry
       from private.demo_slots d
      where d.slot between 1 and p_max_slot and private.demo_lease_active(d);

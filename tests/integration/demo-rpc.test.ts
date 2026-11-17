@@ -1,5 +1,5 @@
 /**
- * P3 demo sandbox RPCs. Uses an isolated TEST slot (9) with its own synthetic
+ * P3 demo sandbox RPCs. Uses an isolated TEST slot (20) with its own synthetic
  * personas so the presenter slot (0) is never disturbed by tests.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -7,13 +7,13 @@ import { createHash, randomBytes } from "node:crypto";
 import type pg from "pg";
 import { adminClient, anonClient, createTestUser, dbClient, deleteTestUsers, type TestUser } from "./helpers";
 
-const SLOT = 9;
+const SLOT = 20; // outside the public pool (1..DEMO_SLOTS) and the pool tests (17–19)
 const SCOPE = `demo:${SLOT}`;
 const TAG = Array.from(randomBytes(4), (b) => String.fromCharCode(97 + (b % 26))).join("");
 
 let db: pg.Client;
 let personas: TestUser[] = [];
-let presenter: TestUser; // synthetic persona in slot 9
+let presenter: TestUser; // synthetic persona in slot 20
 let prodUser: TestUser;
 let prodSpaceId: string;
 let otherSlotSpaceId: string;

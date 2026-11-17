@@ -226,7 +226,7 @@ test.describe("Recruiter demo journey", () => {
 
     const db = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL });
     await db.connect();
-    await db.query(`update private.demo_slots set last_seen_at = now() - interval '31 minutes' where slot = $1`, [slot]);
+    await db.query(`update private.demo_slots set last_seen_at = now() - interval '31 minutes', updated_at = now() - interval '31 minutes' where slot = $1`, [slot]);
     await db.end();
 
     await page.goto("/spaces");
