@@ -78,9 +78,11 @@ behavior change it would see is that its presenter lease now also ends after 30 
 ## Known risks / limits
 
 - **Supabase Auth sign-in rate limit.** Every start, switch and restart is a server-side
-  `signInWithPassword` from Vercel's egress IPs. Supabase limits sign-ins per IP (the default is 30
-  per 5 minutes). Under heavy concurrent use, switches could be throttled. Recommended: raise
-  *Auth → Rate Limits → sign-ins/sign-ups* for the project, and watch for `INTERNAL` errors from
+  `signInWithPassword` from Vercel's egress IPs. That call goes to
+  `/auth/v1/token?grant_type=password`, which Supabase limits to 150 requests per 5 minutes per IP
+  (the token limiter). The separate 30-per-5-minutes *sign-ups* limit applies only to `/signup`
+  and `/otp`, not to these sign-ins. The production limits are unchanged from the defaults. Under
+  very heavy concurrent use, switches could still be throttled; watch for `INTERNAL` errors from
   `/api/demo/switch`.
 - **Finite pool.** `DEMO_SLOTS` (max 20) is the number of simultaneous recruiters. Extra visitors
   see "busy" plus the video link. Each slot is 44 synthetic auth users.
