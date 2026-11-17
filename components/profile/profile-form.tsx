@@ -185,7 +185,7 @@ export function ProfileForm({ initial, onboarding }: { initial: ProfileFormValue
         </FieldGroup>
       </Section>
 
-      <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+      <div data-toast-avoid className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <span className="text-xs text-muted-foreground" aria-live="polite">
           {dirty ? "Unsaved changes" : "All changes saved"}
         </span>

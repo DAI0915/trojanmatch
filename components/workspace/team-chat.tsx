@@ -212,6 +212,7 @@ export function TeamChat({
       </div>
 
       <form
+        data-toast-avoid
         className="flex items-end gap-2 border-t p-3"
         onSubmit={(e) => {
           e.preventDefault();

@@ -384,7 +384,7 @@ export function SmartFormation({
             </details>
           )}
 
-          <section aria-labelledby="send-heading" data-testid="send-invites" className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
+          <section aria-labelledby="send-heading" data-testid="send-invites" data-toast-avoid className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h3 id="send-heading" className="font-medium">Invite this team</h3>
               <fieldset className="mt-1 flex flex-wrap gap-x-4 gap-y-1">

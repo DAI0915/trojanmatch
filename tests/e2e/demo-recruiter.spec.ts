@@ -45,6 +45,18 @@ async function switchFromBar(page: Page, name: string, search = false) {
   await page.waitForLoadState("networkidle"); // full page load: let it hydrate before the next click
 }
 
+/** The visible toast must not overlap `target` (e.g. a chat composer or a sticky Save bar). */
+async function expectToastClearOf(page: Page, target: ReturnType<Page["locator"]>) {
+  const toast = page.locator("[data-sonner-toast][data-visible=true]").first();
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveAttribute("data-mounted", "true");
+  await page.waitForTimeout(450); // let the enter animation settle
+  const [t, b] = [await toast.boundingBox(), await target.boundingBox()];
+  if (!t || !b) return; // target not rendered (e.g. the chat tab is hidden on mobile)
+  const overlap = t.x < b.x + b.width && b.x < t.x + t.width && t.y < b.y + b.height && b.y < t.y + t.height;
+  expect(overlap, `toast ${JSON.stringify(t)} overlaps ${JSON.stringify(b)}`).toBe(false);
+}
+
 /** As an invitee (now on /invitations): accept the demo team's invitation. */
 async function acceptAs(page: Page, name: string, teamUrl: string) {
   await expect(page).toHaveURL(/\/invitations$/, { timeout: 20_000 });
@@ -182,6 +194,7 @@ test.describe("Recruiter demo journey", () => {
     await page.getByRole("button", { name: "Generate kickoff" }).click();
     const kickoff = page.getByTestId("kickoff-content");
     await expect(kickoff).toBeVisible({ timeout: 45_000 });
+    await expectToastClearOf(page, page.locator("form[data-toast-avoid]"));
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("kickoff"), fullPage: true });
 
@@ -250,6 +263,26 @@ test.describe("Recruiter demo journey", () => {
     expect((await sw({ persona: "nora", slot: 0 })).status()).toBe(200); // extra fields can't pick a slot
     const me = (await (await page.request.get("/api/profile")).json()).profile as { scope?: string; display_name: string };
     expect(me.display_name).toBe("Nora Ali");
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
+  });
+
+  test("toasts never cover the sticky Save bar or other bottom controls", async ({ browser }, info) => {
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/recruiter-${n}-${info.project.name}.png`;
+    const { context, page } = await visitor(browser, viewport);
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Try Interactive Demo" }).click();
+    await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+    const headers = { origin: new URL(page.url()).origin };
+    await page.goto("/profile");
+    await page.waitForLoadState("networkidle");
+    const saveBar = page.locator("[data-toast-avoid]").filter({ has: page.getByRole("button", { name: "Save profile" }) });
+    await expect(saveBar).toBeInViewport();
+    await saveBar.getByRole("button", { name: "Save profile" }).click();
+    await expectToastClearOf(page, saveBar);
+    await page.screenshot({ path: shot("toast"), fullPage: false });
 
     await page.request.post("/api/demo/end", { headers, data: {} });
     await context.close();

@@ -169,7 +169,7 @@ export function ParticipationForm({
         <Textarea id="notes" rows={2} maxLength={500} value={v.notes} onChange={(e) => set("notes", e.target.value)} />
       </Field>
 
-      <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+      <div data-toast-avoid className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <Button type="submit" disabled={saving}>
           {saving ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Save data-icon="inline-start" aria-hidden />}
           {firstTime ? "Save & continue" : "Save preferences"}
