@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, fromDbError } from "@/lib/api/errors";
 import { errorResponse } from "@/lib/api/handler";
 import { isAllowedOrigin } from "@/lib/api/origin";
 import { publicEnv } from "@/lib/env";
@@ -9,12 +9,18 @@ import { createClient } from "@/lib/supabase/server";
 import { demoAdminClient } from "./admin";
 import { demoConfig } from "./config";
 import { personaPassword, sha256Hex } from "./crypto";
-import { demoFixture } from "./fixtures";
-import { LEASE_COOKIE, PRESENTER_SLOT, formatLeaseCookie, parseLeaseCookie, personaEmail } from "./personas";
+import { DEMO_PERSONAS, demoFixture } from "./fixtures";
+import { LEASE_COOKIE, formatLeaseCookie, parseLeaseCookie, personaEmail } from "./personas";
 
 type Cfg = NonNullable<ReturnType<typeof demoConfig>>;
 type Admin = ReturnType<typeof demoAdminClient>;
 export type DemoContext = { req: NextRequest; cfg: Cfg; admin: Admin };
+export type Lease = { slot: number; token: string; hash: string; leasedUntil: string };
+
+const PERSONA_KEYS = new Set(DEMO_PERSONAS.map((p) => p.key));
+export function isDemoPersonaKey(key: unknown): key is string {
+  return typeof key === "string" && PERSONA_KEYS.has(key);
+}
 
 /** Demo route wrapper: 404 unless Demo Mode is fully configured; Origin-checked. */
 export function withDemo(handler: (ctx: DemoContext) => Promise<Response>) {
@@ -32,21 +38,22 @@ export function withDemo(handler: (ctx: DemoContext) => Promise<Response>) {
   };
 }
 
-/** Throws DEMO_LEASE_INVALID unless the request carries the current presenter lease. */
-export async function requireLease(admin: Admin) {
-  const store = await cookies();
-  const lease = parseLeaseCookie(store.get(LEASE_COOKIE)?.value);
-  if (!lease || lease.slot !== PRESENTER_SLOT) {
-    throw new ApiError("DEMO_LEASE_INVALID", "Start the demo with the presenter code first.");
-  }
-  const { data, error } = await admin.rpc("demo_check_lease", {
-    p_slot: lease.slot,
-    p_token_hash: sha256Hex(lease.token),
-  });
-  if (error || !(data as { valid?: boolean })?.valid) {
-    throw new ApiError("DEMO_LEASE_INVALID", "This demo session has ended. Start it again.");
-  }
-  return { ...lease, hash: sha256Hex(lease.token) };
+/** The lease this browser holds, if it is the CURRENT active lease of a pool slot. */
+export async function currentLease(cfg: Cfg, admin: Admin): Promise<Lease | null> {
+  const lease = parseLeaseCookie((await cookies()).get(LEASE_COOKIE)?.value);
+  if (!lease || lease.slot < 1 || lease.slot > cfg.DEMO_SLOTS) return null;
+  const hash = sha256Hex(lease.token);
+  const { data, error } = await admin.rpc("demo_check_lease", { p_slot: lease.slot, p_token_hash: hash });
+  const d = (data ?? {}) as { valid?: boolean; leased_until?: string };
+  if (error || !d.valid) return null;
+  return { ...lease, hash, leasedUntil: d.leased_until ?? "" };
+}
+
+/** Throws DEMO_LEASE_INVALID unless the request carries an active sandbox lease. */
+export async function requireLease(cfg: Cfg, admin: Admin): Promise<Lease> {
+  const lease = await currentLease(cfg, admin);
+  if (!lease) throw new ApiError("DEMO_LEASE_INVALID", "Your demo session has ended. Start a new one.");
+  return lease;
 }
 
 export async function setLeaseCookie(slot: number, token: string, minutes: number) {
@@ -66,53 +73,69 @@ export async function clearLeaseCookie() {
 }
 
 /**
- * Signs the browser in as an allowlisted persona using supported Auth APIs.
- * The email is derived from the persona key; the password is derived server-side.
+ * Signs the browser in as a seeded persona OF THIS SLOT using supported Auth
+ * APIs. The email is derived from (key, slot); the password is derived
+ * server-side and never leaves the server.
  *
  * We deliberately do NOT revoke the previous session first: in-flight requests
  * (e.g. Next.js prefetches) still carrying the old cookies would then fail auth
- * and their responses would clear the NEW session cookies (a race seen in
- * production). signInWithPassword replaces this browser's cookies; the previous
- * synthetic session is never used again and expires with its JWT, and every demo
- * request is still gated by the lease.
+ * and their responses would clear the NEW session cookies. signInWithPassword
+ * replaces this browser's cookies; every demo request is still gated by the lease.
  */
-export async function signInAsPersona(cfg: Cfg, key: string) {
+export async function signInAsPersona(cfg: Cfg, slot: number, key: string) {
+  if (!isDemoPersonaKey(key)) throw new ApiError("INVALID_INPUT", "Unknown persona.");
   const supabase = await createClient();
-  const email = personaEmail(key, PRESENTER_SLOT);
+  const email = personaEmail(key, slot);
   const { error } = await supabase.auth.signInWithPassword({ email, password: personaPassword(cfg.DEMO_PERSONA_SECRET, email) });
   if (error) {
-    console.error("[demo] persona sign-in failed", key, error.code);
-    throw new ApiError("INTERNAL", "Demo persona is not set up. Run the seed script.");
+    console.error("[demo] persona sign-in failed", slot, key, error.code);
+    throw new ApiError("INTERNAL", "This demo sandbox isn't ready. Please try again in a moment.");
   }
 }
 
-/** Salted hash of the client IP for throttling (raw IPs are never stored). */
+/**
+ * Salted hash of the client IP for throttling (raw IPs are never stored).
+ * On Vercel, x-real-ip / x-forwarded-for are set by the platform edge (client-supplied values are
+ * not trusted); x-real-ip is preferred.
+ */
 export async function clientSubject(cfg: Cfg) {
   const h = await headers();
-  const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || "unknown";
+  const ip = h.get("x-real-ip")?.trim() || (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
   return `demo:${sha256Hex(`${cfg.DEMO_PERSONA_SECRET}|${ip}`).slice(0, 32)}`;
 }
+
+/** Throttle: throws RATE_LIMITED if `subject` already did `kind` `max` times in the window; else records one. */
+export async function rateLimit(admin: Admin, subject: string, kind: string, max: number, windowMinutes: number, message: string) {
+  const { data: limited, error } = await admin.rpc("demo_rate_exceeded", {
+    p_subject: subject, p_kind: kind, p_max: max, p_window_minutes: windowMinutes,
+  });
+  if (error) throw fromDbError(error);
+  if (limited) throw new ApiError("RATE_LIMITED", message);
+  await admin.rpc("demo_rate_record", { p_subject: subject, p_kind: kind });
+}
+
+/** Rate-limit subject for actions inside one sandbox lease. */
+export const leaseSubject = (lease: Lease) => `lease:${lease.hash.slice(0, 32)}`;
 
 export function ok(body: unknown, init?: ResponseInit) {
   return NextResponse.json(body, { ...init, headers: { "cache-control": "no-store", ...(init?.headers ?? {}) } });
 }
 
 /**
- * Resets the presenter sandbox to the synthetic fixture and clears the
- * Space-creation rate limits of THIS sandbox's synthetic personas (so repeated
- * rehearsals can't exhaust them). Callers must have verified the presenter lease
- * (reset) or presenter code (start) first. Never touches production users.
+ * Resets ONE sandbox slot to the synthetic fixture and clears the Space-creation
+ * limits of that slot's synthetic personas. Callers must hold (or have just
+ * acquired) this slot's lease. Never touches production users or other slots.
  */
-export async function resetSandbox(admin: Admin) {
-  const { data, error } = await admin.rpc("demo_reset_slot", { p_slot: PRESENTER_SLOT, p_fixture: demoFixture() });
+export async function resetSandbox(admin: Admin, slot: number) {
+  const { data, error } = await admin.rpc("demo_reset_slot", { p_slot: slot, p_fixture: demoFixture() });
   if (error) {
-    console.error("[demo] reset failed", error.message);
-    throw new ApiError("INTERNAL", "Demo data could not be reset.");
+    console.error("[demo] reset failed", slot, error.message);
+    throw new ApiError("INTERNAL", "Demo data could not be prepared.");
   }
-  const { data: cleared, error: clearErr } = await admin.rpc("demo_clear_create_limits", { p_slot: PRESENTER_SLOT });
+  const { data: cleared, error: clearErr } = await admin.rpc("demo_clear_create_limits", { p_slot: slot });
   if (clearErr) {
-    console.error("[demo] clearing demo rate limits failed", clearErr.message);
-    throw new ApiError("INTERNAL", "Demo data could not be reset.");
+    console.error("[demo] clearing demo rate limits failed", slot, clearErr.message);
+    throw new ApiError("INTERNAL", "Demo data could not be prepared.");
   }
   return { ...(data as { personas: number; participations: number }), cleared_create_limits: cleared as number };
 }

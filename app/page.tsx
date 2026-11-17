@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { buttonVariants } from "@/components/ui/button";
+import { TryDemoButton } from "@/components/demo/try-demo-button";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 export default async function LandingPage() {
@@ -36,14 +37,23 @@ export default async function LandingPage() {
             Join the Matching Space for your exact hackathon or class assignment, then find a team,
             grow yours, or let AI propose a complete team. AI recommends. Humans decide.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href={user ? "/spaces" : "/sign-in"} className={buttonVariants({ size: "lg" })}>
-              Find Your Team <ArrowRight data-icon="inline-end" />
-            </Link>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-start">
+            {user ? (
+              <Link href="/spaces" className={buttonVariants({ size: "lg" })}>
+                Open app <ArrowRight data-icon="inline-end" />
+              </Link>
+            ) : (
+              <TryDemoButton />
+            )}
             <Link href="/demo" className={buttonVariants({ size: "lg", variant: "outline" })}>
-              Try Demo Mode
+              How the demo works
             </Link>
           </div>
+          {!user && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No sign-up needed. You get a private sandbox of synthetic students and start as Jordan Lee.
+            </p>
+          )}
         </section>
 
         <section className="grid gap-4 pb-16 sm:grid-cols-3">

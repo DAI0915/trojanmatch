@@ -47,6 +47,7 @@ const STATUS: Partial<Record<ErrorCode, number>> = {
   INVALID_INPUT: 400,
   INVALID_CODE: 400,
   RATE_LIMITED: 429,
+  DEMO_BUSY: 503,
   INTERNAL: 500,
 };
 

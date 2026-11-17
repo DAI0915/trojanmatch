@@ -1,0 +1,89 @@
+# Public recruiter demo (password-free)
+
+Replaces the hackathon-era *presenter* demo. Before, one shared sandbox (slot 0) was gated by a
+presenter code, and every start reset it for everyone. Now any visitor clicks **Try Interactive
+Demo** and gets their **own** sandbox.
+
+## How it works
+
+1. `POST /api/demo/start` (public, Origin-checked, no body):
+   - If the browser already holds an active lease, it **resumes** that lease. No reset happens.
+   - Otherwise it applies the per-visitor throttle: `DEMO_STARTS_PER_HOUR` per salted IP hash.
+   - It then calls `demo_acquire_slot`, which picks a free, seeded slot in `1..DEMO_SLOTS` under an
+     advisory lock, and caps active sandboxes per visitor (`DEMO_MAX_SESSIONS_PER_VISITOR`).
+   - It resets **that slot only** to the synthetic fixture, signs in as Jordan, and sets the
+     httpOnly `tm_demo_lease` cookie.
+   - If no slot is free, it returns `503 DEMO_BUSY` with a retry time. The UI offers the video instead.
+2. `proxy.ts` calls `demo_lease_valid` on every request. It checks that the lease is the current one
+   **for the caller's own slot**, and records activity at most once a minute. Invalid, expired or
+   idle sessions are signed out and redirected to `/demo?expired=1`.
+3. `switch`, `reset` (restart), `simulate-joins` and `end` all need an active lease, and act only on
+   the lease's slot.
+   - `switch` accepts a featured persona key, or a user id that resolves (via the Auth admin API) to
+     a synthetic persona **of the same slot**.
+   - `reset` restores the slot, renews the lease and signs in as Jordan again.
+4. AI Kickoff calls `demo_ai_quota_take()` before Gemini.
+   - Demo users get 4 Gemini kickoffs per visitor lease per hour, and 60 across all demo sandboxes
+     per day. Beyond that they get the labeled deterministic template.
+   - Production users always get `true`, and nothing is recorded for them.
+
+Lease lifetime: hard expiry at `DEMO_LEASE_MINUTES` (default 60), and an idle timeout of 30 minutes.
+Expired or idle slots are reclaimed by the next visitor, whose start resets the slot. That reset is
+the cleanup step.
+
+## Database changes (migration `20261116000011_public_demo_pool.sql`)
+
+Additive only. No data is deleted, no RLS policy changes, and applied migrations are not edited.
+
+- `private.demo_slots`: new columns `holder_subject` (salted IP hash, never a raw IP),
+  `started_at`, `last_seen_at`.
+- New: `private.demo_lease_active`, and `public.demo_acquire_slot` and `public.demo_renew_lease`
+  (both **service_role only**).
+- New: `public.demo_ai_quota_take()` (authenticated; it only reads and writes the caller's own scope).
+- Replaced bodies (same signatures and grants): `demo_check_lease` (adds the idle check) and
+  `demo_lease_valid` (adds the idle check and touches `last_seen_at`).
+- New index `api_events (kind, created_at)`.
+
+## Deploying (after approval)
+
+```bash
+git switch main && git merge --ff-only feature/public-demo && git push
+
+# 1. Database (review first; expect only 20261116000011)
+npx supabase db push --dry-run
+npx supabase db push
+
+# 2. Seed the sandbox pool (44 synthetic users per slot; idempotent; slot 0 is untouched)
+npx tsx scripts/seed-demo.ts --env .env.cloud.local --slots 1-10
+
+# 3. Vercel env (Production): set
+#    DEMO_SLOTS=10  DEMO_LEASE_MINUTES=60  DEMO_STARTS_PER_HOUR=6  DEMO_MAX_SESSIONS_PER_VISITOR=2
+#    (DEMO_MODE_ENABLED, DEMO_PERSONA_SECRET, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY already exist.
+#     DEMO_PRESENTER_CODE is no longer read; keep it until the new demo is stable so a rollback works.)
+vercel --prod --scope dai0915
+
+# 4. Verify with low traffic (one IP: keep it to a few starts)
+E2E_BASE_URL=https://trojanmatch-jade.vercel.app npx playwright test tests/e2e/demo-recruiter.spec.ts \
+  --project=demo-desktop -g "landing|two visitors"
+```
+
+Rollback: promote the previous Vercel deployment. Migration 0011 is additive. The old code only uses
+slot 0, ignores the new columns and functions, and still needs `DEMO_PRESENTER_CODE`. The only
+behavior change it would see is that its presenter lease now also ends after 30 idle minutes.
+
+## Known risks / limits
+
+- **Supabase Auth sign-in rate limit.** Every start, switch and restart is a server-side
+  `signInWithPassword` from Vercel's egress IPs. Supabase limits sign-ins per IP (the default is 30
+  per 5 minutes). Under heavy concurrent use, switches could be throttled. Recommended: raise
+  *Auth → Rate Limits → sign-ins/sign-ups* for the project, and watch for `INTERNAL` errors from
+  `/api/demo/switch`.
+- **Finite pool.** `DEMO_SLOTS` (max 20) is the number of simultaneous recruiters. Extra visitors
+  see "busy" plus the video link. Each slot is 44 synthetic auth users.
+- **IP-based throttles** are coarse. Visitors behind one NAT share a budget, and a distributed actor
+  could occupy the pool for up to 30 idle minutes per slot. That denies the demo only and never
+  touches data. A CAPTCHA (e.g. Turnstile) on start is the next step if this happens.
+- **Auth sessions** for personas are not revoked on switch, by design to avoid a cookie race. They
+  are useless without the lease cookie because the proxy checks it, and they expire with the JWT.
+- **Gemini availability** is external. When Gemini fails or the budget is used, the kickoff falls
+  back to the deterministic template, and the UI says why.

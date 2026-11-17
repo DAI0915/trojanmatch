@@ -17,8 +17,10 @@ test.describe("P1 — auth & shell @smoke", () => {
   test("landing renders value prop and CTAs, no horizontal scroll", async ({ page }, info) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Stop searching.");
-    await expect(page.getByRole("link", { name: "Find Your Team" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Try Demo Mode" })).toBeVisible();
+    // The password-free interactive demo is the primary call to action (a button: one click starts it).
+    await expect(page.getByRole("button", { name: "Try Interactive Demo" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "How the demo works" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(page.getByText("not affiliated with or endorsed by USC")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(overflow).toBe(false);

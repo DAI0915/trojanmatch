@@ -1,6 +1,7 @@
 /**
- * Seeds the presenter demo sandbox (slot 0): creates/updates ~44 CONFIRMED
- * synthetic auth users, registers them as demo personas, then loads the fixture.
+ * Seeds the public demo sandbox POOL (slots 1..N): for each slot creates/updates
+ * ~44 CONFIRMED synthetic auth users, registers them as that slot's personas,
+ * then loads the fixture. Each slot is an isolated scope 'demo:<n>'.
  *
  * - Uses only supported Supabase Auth admin APIs (no writes to auth.* tables).
  * - Personas get app_metadata { scope: 'demo:0', is_synthetic: true }; emails use
@@ -8,13 +9,15 @@
  * - Passwords are HMAC(DEMO_PERSONA_SECRET, email): never printed or stored.
  * - Idempotent: safe to re-run.
  *
- * Usage: npx tsx scripts/seed-demo.ts [--env .env.local] [--no-reset]
+ * Usage: npx tsx scripts/seed-demo.ts [--env .env.local] [--slots 1-4] [--no-reset]
+ *   --slots: a range "1-10" or list "1,2,5" (default: 1..DEMO_SLOTS, or 1..4).
+ *   Slot 0 is the legacy presenter slot and is not part of the public pool.
  * Needs: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEMO_PERSONA_SECRET
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { DEMO_PERSONAS, demoFixture } from "../lib/demo/fixtures";
-import { PRESENTER_SLOT, SWITCHABLE_PERSONAS, personaEmail } from "../lib/demo/personas";
+import { MAX_POOL_SLOTS, SWITCHABLE_PERSONAS, personaEmail } from "../lib/demo/personas";
 import { personaPassword } from "../lib/demo/password";
 
 const arg = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined);
@@ -28,8 +31,22 @@ if (!url || !serviceKey || !secret || secret.length < 32) {
   process.exit(1);
 }
 
-const slot = PRESENTER_SLOT;
-const scope = `demo:${slot}`;
+function parseSlots(spec: string | undefined): number[] {
+  const fallback = Math.min(Math.max(Number(process.env.DEMO_SLOTS) || 4, 1), MAX_POOL_SLOTS);
+  const raw = spec ?? `1-${fallback}`;
+  const out = new Set<number>();
+  for (const part of raw.split(",")) {
+    const [a, b] = part.split("-").map((x) => Number(x.trim()));
+    for (let n = a; n <= (Number.isFinite(b) ? b : a); n++) out.add(n);
+  }
+  const slots = [...out].sort((x, y) => x - y);
+  if (!slots.length || slots.some((n) => !Number.isInteger(n) || n < 0 || n > MAX_POOL_SLOTS)) {
+    console.error(`Invalid --slots "${raw}" (use e.g. 1-10 or 1,2,3; 0..${MAX_POOL_SLOTS}).`);
+    process.exit(1);
+  }
+  return slots;
+}
+const slots = parseSlots(arg("--slots"));
 const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 const switchable = new Set<string>(SWITCHABLE_PERSONAS.map((p) => p.key));
 
@@ -45,8 +62,13 @@ async function existingUsers(): Promise<Map<string, string>> {
 }
 
 async function main() {
-  console.log(`Target: ${new URL(url!).host} · ${scope}`);
+  console.log(`Target: ${new URL(url!).host} · slots ${slots.join(", ")}`);
   const existing = await existingUsers();
+  for (const slot of slots) await seedSlot(slot, existing);
+}
+
+async function seedSlot(slot: number, existing: Map<string, string>) {
+  const scope = `demo:${slot}`;
   const registry: { persona_key: string; user_id: string; switchable: boolean }[] = [];
   let created = 0;
   let updated = 0;
@@ -72,7 +94,7 @@ async function main() {
       created++;
     }
   }
-  console.log(`personas: ${created} created, ${updated} updated`);
+  console.log(`[${scope}] personas: ${created} created, ${updated} updated`);
 
   const { data: n, error: regErr } = await admin.rpc("demo_register_personas", { p_slot: slot, p_personas: registry });
   if (regErr) throw new Error(`register: ${regErr.message}`);

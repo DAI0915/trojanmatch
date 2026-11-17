@@ -6,7 +6,9 @@ import {
   formatLeaseCookie,
   isSwitchablePersona,
   parseLeaseCookie,
+  parsePersonaEmail,
   personaEmail,
+  scopeSlot,
 } from "@/lib/demo/personas";
 import { profileSchema } from "@/lib/validation/profile";
 import { participationSchema } from "@/lib/validation/participation";
@@ -20,9 +22,21 @@ describe("persona allowlist", () => {
     for (const k of ["ethan", "admin", "", "jordan@x", "../jordan", 1, null, undefined]) expect(isSwitchablePersona(k)).toBe(false);
   });
   it("derives emails from key + slot only, on a reserved TLD", () => {
-    expect(personaEmail("jordan")).toBe("jordan.s0@demo.trojanmatch.invalid");
-    expect(() => personaEmail("dev1@trojanmatch.test")).toThrow();
+    expect(personaEmail("jordan", 0)).toBe("jordan.s0@demo.trojanmatch.invalid");
+    expect(personaEmail("maya", 7)).toBe("maya.s7@demo.trojanmatch.invalid");
+    expect(() => personaEmail("dev1@trojanmatch.test", 1)).toThrow();
     expect(() => personaEmail("jordan", 21)).toThrow();
+  });
+  it("parses only synthetic demo addresses back to {key, slot}", () => {
+    expect(parsePersonaEmail("maya.s7@demo.trojanmatch.invalid")).toEqual({ key: "maya", slot: 7 });
+    expect(parsePersonaEmail(personaEmail("daniel", 12))).toEqual({ key: "daniel", slot: 12 });
+    for (const bad of [null, undefined, "", "dev1@trojanmatch.test", "maya.s7@demo.trojanmatch.invalid.evil.com", "maya.s99@demo.trojanmatch.invalid", "x@demo.trojanmatch.invalid"]) {
+      expect(parsePersonaEmail(bad)).toBeNull();
+    }
+  });
+  it("reads the slot of a demo scope only", () => {
+    expect(scopeSlot("demo:3")).toBe(3);
+    for (const s of ["prod", "demo:", "demo:x", "demo:123", null, undefined]) expect(scopeSlot(s)).toBeNull();
   });
 });
 
@@ -38,14 +52,14 @@ describe("lease cookie", () => {
 describe("persona passwords", () => {
   const secret = "s".repeat(32);
   it("are deterministic per email and differ across personas and secrets", () => {
-    const a = personaPassword(secret, personaEmail("jordan"));
-    expect(a).toBe(personaPassword(secret, personaEmail("jordan")));
-    expect(a).not.toBe(personaPassword(secret, personaEmail("maya")));
-    expect(a).not.toBe(personaPassword("t".repeat(32), personaEmail("jordan")));
+    const a = personaPassword(secret, personaEmail("jordan", 1));
+    expect(a).toBe(personaPassword(secret, personaEmail("jordan", 1)));
+    expect(a).not.toBe(personaPassword(secret, personaEmail("maya", 1)));
+    expect(a).not.toBe(personaPassword("t".repeat(32), personaEmail("jordan", 1)));
     expect(a.length).toBeGreaterThanOrEqual(40);
   });
   it("refuse weak secrets", () => {
-    expect(() => personaPassword("short", personaEmail("jordan"))).toThrow();
+    expect(() => personaPassword("short", personaEmail("jordan", 1))).toThrow();
   });
 });
 

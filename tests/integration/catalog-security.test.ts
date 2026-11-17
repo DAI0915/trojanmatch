@@ -17,6 +17,7 @@ const AUTHENTICATED_EXECUTE_ALLOWLIST = [
   "public.check_space_duplicates",
   "public.create_space",
   "public.create_team",
+  "public.demo_ai_quota_take",
   "public.demo_lease_valid",
   "public.finalize_team",
   "public.find_teams",
@@ -119,10 +120,10 @@ describe("functions", () => {
              has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth,
              has_function_privilege('service_role', p.oid, 'EXECUTE') as service
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname like 'demo\\_%' and p.proname <> 'demo_lease_valid'
+      where n.nspname = 'public' and p.proname like 'demo\\_%' and p.proname not in ('demo_lease_valid', 'demo_ai_quota_take')
       order by 1
     `);
-    expect(rows.length).toBeGreaterThanOrEqual(8);
+    expect(rows.length).toBeGreaterThanOrEqual(10);
     for (const r of rows) {
       expect({ fn: r.proname, anon: r.anon, auth: r.auth, service: r.service }).toEqual({
         fn: r.proname, anon: false, auth: false, service: true,

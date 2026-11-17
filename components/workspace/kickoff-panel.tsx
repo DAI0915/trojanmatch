@@ -27,6 +27,7 @@ const FALLBACK: Record<string, string> = {
   http: "Gemini was unavailable, so this kickoff uses the deterministic template.",
   blocked: "Gemini declined this request, so this kickoff uses the deterministic template.",
   invalid: "Gemini's answer didn't pass validation, so this kickoff uses the deterministic template.",
+  demo_limit: "This demo sandbox has used its Gemini budget for now, so this kickoff was built from your team's data with the deterministic template.",
 };
 
 /**

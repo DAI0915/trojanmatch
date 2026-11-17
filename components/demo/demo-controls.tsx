@@ -12,15 +12,7 @@ import { cn } from "@/lib/utils";
 
 type DemoSpace = { id: string; title: string; participant_count: number };
 
-export function DemoControls({
-  currentPersona,
-  spaces,
-  leasedUntil,
-}: {
-  currentPersona: string | null;
-  spaces: DemoSpace[];
-  leasedUntil: string | null;
-}) {
+export function DemoControls({ currentPersona, spaces }: { currentPersona: string | null; spaces: DemoSpace[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState(spaces[0]?.id ?? "");
@@ -47,7 +39,9 @@ export function DemoControls({
         <h2 id="persona-heading" className="flex items-center gap-2 font-medium">
           <Users className="size-4 text-primary" aria-hidden /> Switch persona
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">All personas are synthetic. Switching signs this browser in as them.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          All personas are synthetic and live in your private sandbox. You can also switch from the yellow demo bar.
+        </p>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {SWITCHABLE_PERSONAS.map((p) => {
             const current = p.key === currentPersona;
@@ -97,8 +91,8 @@ export function DemoControls({
           <UserPlus className="size-4 text-primary" aria-hidden /> Simulate participants joining
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Synthetic personas join through the normal join rules and are labeled as simulated. Create TreeHacks 2027
-          first, then simulate joins into it.
+          Optional: create a new Space (for example TreeHacks 2027), then have synthetic students join it through the
+          normal join rules. They are labeled as simulated.
         </p>
         {spaces.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">No demo Spaces available to this persona.</p>
@@ -134,10 +128,10 @@ export function DemoControls({
 
       <section aria-labelledby="reset-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div>
-          <h2 id="reset-heading" className="font-medium">Reset or end</h2>
+          <h2 id="reset-heading" className="font-medium">Restart or end</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Reset restores the synthetic sandbox (removes Spaces created during the demo). Real students&apos; data is never touched.
-            {leasedUntil && ` Session valid until ${new Date(leasedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`}
+            Restart puts your sandbox back to its starting state and signs you in as Jordan again. Only your sandbox is
+            affected.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -145,13 +139,21 @@ export function DemoControls({
             variant="outline"
             disabled={!!busy}
             onClick={() => {
-              if (window.confirm("Reset the demo sandbox to its starting state?")) {
-                run("reset", () => apiFetch("/api/demo/reset", { method: "POST", json: {} }), "Demo sandbox reset.");
+              if (window.confirm("Restart your demo? Teams, invitations and Spaces you created will be removed.")) {
+                setBusy("reset");
+                apiFetch("/api/demo/reset", { method: "POST", json: {} })
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: the session is now Jordan again
+                  .then(() => window.location.assign("/spaces?welcome=1"))
+                  .catch((err: ApiClientError) => {
+                    toast.error(err.message);
+                    setBusy(null);
+                    if (err.code === "DEMO_LEASE_INVALID") router.push("/demo?expired=1");
+                  });
               }
             }}
           >
             {busy === "reset" ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <RotateCcw data-icon="inline-start" aria-hidden />}
-            Reset demo
+            Restart demo
           </Button>
           <Button
             variant="ghost"

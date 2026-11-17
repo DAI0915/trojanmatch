@@ -1,42 +1,60 @@
-import { z } from "zod";
 import { ApiError, fromDbError } from "@/lib/api/errors";
-import { parseJson } from "@/lib/api/handler";
-import { newLeaseToken, secretsEqual, sha256Hex } from "@/lib/demo/crypto";
-import { PRESENTER_SLOT } from "@/lib/demo/personas";
-import { clientSubject, ok, resetSandbox, setLeaseCookie, signInAsPersona, withDemo } from "@/lib/demo/server";
+import { newLeaseToken, sha256Hex } from "@/lib/demo/crypto";
+import {
+  clientSubject, currentLease, ok, rateLimit, resetSandbox, setLeaseCookie, signInAsPersona, withDemo,
+} from "@/lib/demo/server";
+import { scopeSlot } from "@/lib/demo/personas";
+import { getCurrentUser } from "@/lib/supabase/server";
 
 export const maxDuration = 30;
 
+type Acquire = { ok: boolean; slot?: number; leased_until?: string; error?: "BUSY" | "TOO_MANY_SESSIONS"; retry_at?: string | null };
+
 /**
- * POST /api/demo/start {code} — UNAUTHENTICATED bootstrap for the presenter
- * sandbox. Requires the presenter code (constant-time compare, throttled per
- * salted IP). Leases slot 0, resets it to the synthetic fixture, signs in as
- * Jordan, and sets an httpOnly lease cookie. Never touches production data.
+ * POST /api/demo/start — UNAUTHENTICATED, password-free bootstrap.
+ *
+ * - If this browser already holds an active sandbox lease, it simply resumes it.
+ * - Otherwise it leases a FREE sandbox slot from the pool (never one another
+ *   visitor is using), resets only that slot to the synthetic fixture, signs in
+ *   as Jordan (synthetic) and sets an httpOnly lease cookie.
+ *
+ * Abuse controls: Origin check, DEMO_STARTS_PER_HOUR per salted IP hash, at most
+ * DEMO_MAX_SESSIONS_PER_VISITOR active sandboxes per visitor, and a finite pool.
  */
-export const POST = withDemo(async ({ req, cfg, admin }) => {
-  const { code } = await parseJson(req, z.object({ code: z.string().trim().min(1).max(100) }));
-  const subject = await clientSubject(cfg);
-
-  const { data: limited, error: rateErr } = await admin.rpc("demo_rate_exceeded", {
-    p_subject: subject, p_kind: "demo_start_failed", p_max: 15, p_window_minutes: 60,
-  });
-  if (rateErr) throw fromDbError(rateErr);
-  if (limited) throw new ApiError("RATE_LIMITED", "Too many incorrect codes. Try again later.");
-
-  if (!secretsEqual(code, cfg.DEMO_PRESENTER_CODE)) {
-    await admin.rpc("demo_rate_record", { p_subject: subject, p_kind: "demo_start_failed" });
-    throw new ApiError("INVALID_CODE", "Incorrect presenter code.");
+export const POST = withDemo(async ({ cfg, admin }) => {
+  const existing = await currentLease(cfg, admin);
+  if (existing) {
+    const { user } = await getCurrentUser();
+    const userSlot = scopeSlot((user?.app_metadata as { scope?: string } | undefined)?.scope);
+    if (userSlot !== existing.slot) await signInAsPersona(cfg, existing.slot, "jordan");
+    return ok({ ok: true, resumed: true, leased_until: existing.leasedUntil });
   }
 
+  const subject = await clientSubject(cfg);
+  await rateLimit(admin, subject, "demo_start", cfg.DEMO_STARTS_PER_HOUR, 60, "You've started several demos recently. Please try again later.");
+
   const token = newLeaseToken();
-  const { data: lease, error: leaseErr } = await admin.rpc("demo_start_lease", {
-    p_slot: PRESENTER_SLOT, p_token_hash: sha256Hex(token), p_minutes: cfg.DEMO_LEASE_MINUTES,
+  const hash = sha256Hex(token);
+  const { data, error } = await admin.rpc("demo_acquire_slot", {
+    p_max_slot: cfg.DEMO_SLOTS, p_token_hash: hash, p_minutes: cfg.DEMO_LEASE_MINUTES,
+    p_subject: subject, p_max_per_subject: cfg.DEMO_MAX_SESSIONS_PER_VISITOR,
   });
-  if (leaseErr) throw fromDbError(leaseErr);
+  if (error) throw fromDbError(error);
+  const r = data as Acquire;
+  if (!r.ok || !r.slot) {
+    if (r.error === "TOO_MANY_SESSIONS") {
+      throw new ApiError("RATE_LIMITED", "You already have demo sessions open in other browsers. Use one of them, or try again later.");
+    }
+    throw new ApiError("DEMO_BUSY", "All demo sandboxes are in use right now. Please try again in a few minutes.", { retry_at: r.retry_at ?? null });
+  }
 
-  await resetSandbox(admin);
-
-  await signInAsPersona(cfg, "jordan");
-  await setLeaseCookie(PRESENTER_SLOT, token, cfg.DEMO_LEASE_MINUTES);
-  return ok({ ok: true, persona: "jordan", leased_until: (lease as { leased_until: string }).leased_until });
+  try {
+    await resetSandbox(admin, r.slot);
+    await signInAsPersona(cfg, r.slot, "jordan");
+  } catch (e) {
+    await admin.rpc("demo_end_lease", { p_slot: r.slot, p_token_hash: hash });
+    throw e;
+  }
+  await setLeaseCookie(r.slot, token, cfg.DEMO_LEASE_MINUTES);
+  return ok({ ok: true, resumed: false, leased_until: r.leased_until });
 });

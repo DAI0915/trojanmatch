@@ -33,7 +33,7 @@ export type KickoffBrief = {
   source: "llm" | "template";
   model: string | null;
   /** Why the template was used (shown honestly in the UI). */
-  fallback_reason: null | "not_configured" | "timeout" | "http" | "blocked" | "invalid";
+  fallback_reason: null | "not_configured" | "timeout" | "http" | "blocked" | "invalid" | "demo_limit";
   content: KickoffContent;
 };
 
@@ -208,6 +208,12 @@ export async function generateKickoff(w: Workspace): Promise<KickoffBrief> {
   } catch (e) {
     const reason = e instanceof GeminiError ? e.kind : "http";
     if (reason !== "not_configured") console.error("[kickoff] falling back to template:", reason);
-    return { version: 1, source: "template", model: null, fallback_reason: reason, content: sanitize(templateKickoff(w), ids) };
+    return templateBrief(w, reason);
   }
+}
+
+/** Deterministic template kickoff (no model call), labeled with why it was used. */
+export function templateBrief(w: Workspace, reason: NonNullable<KickoffBrief["fallback_reason"]>): KickoffBrief {
+  const ids = new Set(w.members.map((m) => m.id));
+  return { version: 1, source: "template", model: null, fallback_reason: reason, content: sanitize(templateKickoff(w), ids) };
 }

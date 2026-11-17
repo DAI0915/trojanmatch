@@ -6,6 +6,8 @@ import { MobileNav } from "@/components/shell/mobile-nav";
 import { SpaceSwitcher } from "@/components/shell/space-switcher";
 import { UserMenu } from "@/components/shell/user-menu";
 import type { ShellSpace } from "@/components/shell/nav-items";
+import type { PendingInvitee } from "@/components/demo/persona-switcher";
+import { parsePersonaEmail } from "@/lib/demo/personas";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
@@ -22,6 +24,19 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       .order("created_at", { ascending: false }),
   ]);
 
+  // Demo only: people this persona's teams have invited (RLS limits this to
+  // invitations the caller can see), so the visitor can switch to them to accept.
+  const isDemo = !!profile?.scope?.startsWith("demo:");
+  let invitees: PendingInvitee[] = [];
+  if (isDemo) {
+    const { data: inv } = await supabase.from("invitations").select("user_id").eq("status", "pending").neq("user_id", user.id).limit(20);
+    const ids = [...new Set((inv ?? []).map((i) => i.user_id))];
+    if (ids.length) {
+      const { data: people } = await supabase.from("profiles").select("id, display_name").in("id", ids);
+      invitees = (people ?? []).map((p) => ({ userId: p.id, name: p.display_name }));
+    }
+  }
+
   const spaces: ShellSpace[] = (memberships ?? [])
     .map((m) => m.space)
     .filter((s): s is NonNullable<typeof s> => s !== null);
@@ -33,7 +48,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <AppNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        {profile?.scope?.startsWith("demo:") && <DemoBanner name={profile.display_name} />}
+        {isDemo && profile && (
+          <DemoBanner name={profile.display_name} personaKey={parsePersonaEmail(user.email)?.key ?? null} invitees={invitees} />
+        )}
         <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6">
           <MobileNav />
           <div className="min-w-0 flex-1">

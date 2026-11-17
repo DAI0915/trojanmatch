@@ -1,19 +1,30 @@
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Settings2 } from "lucide-react";
+import { DemoGuide } from "./demo-guide";
+import { PersonaSwitcher, type PendingInvitee } from "./persona-switcher";
 
-/** Always-visible label while acting as a synthetic persona. */
-export function DemoBanner({ name }: { name: string }) {
+/** Always-visible label while acting as a synthetic persona in a private demo sandbox. */
+export function DemoBanner({ name, personaKey, invitees }: { name: string; personaKey: string | null; invitees: PendingInvitee[] }) {
   return (
-    <div role="status" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-brand-gold/60 bg-brand-gold/15 px-4 py-1.5 text-center text-xs">
-      <span className="inline-flex items-center gap-1.5 font-semibold">
-        <FlaskConical className="size-3.5" aria-hidden /> Demo Mode
+    <div
+      role="region"
+      aria-label="Demo Mode"
+      data-testid="demo-bar"
+      className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-brand-gold/60 bg-brand-gold/15 px-4 py-1.5 text-center text-xs"
+    >
+      <span role="status" className="inline-flex items-center gap-1.5">
+        <FlaskConical className="size-3.5" aria-hidden />
+        <span>
+          <strong>Demo Mode</strong> · Synthetic data · You are <strong>{name}</strong>
+        </span>
       </span>
-      <span>
-        Synthetic data only · You are <strong>{name}</strong> (synthetic persona)
+      <span className="inline-flex items-center gap-4">
+        <PersonaSwitcher currentKey={personaKey} invitees={invitees} />
+        <DemoGuide />
+        <Link href="/demo" className="inline-flex items-center gap-1 font-medium underline underline-offset-2">
+          <Settings2 className="size-3.5" aria-hidden /> Demo controls
+        </Link>
       </span>
-      <Link href="/demo" className="font-medium underline underline-offset-2">
-        Demo controls
-      </Link>
     </div>
   );
 }

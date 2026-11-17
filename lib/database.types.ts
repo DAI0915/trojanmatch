@@ -319,6 +319,12 @@ isOneToOne: false
 "create_team":
 { Args: { "p_payload": Json,"p_space_id": string }; Returns: Json
                            },
+"demo_acquire_slot":
+{ Args: { "p_max_per_subject": number,"p_max_slot": number,"p_minutes": number,"p_subject": string,"p_token_hash": string }; Returns: Json
+                           },
+"demo_ai_quota_take":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "demo_check_lease":
 { Args: { "p_slot": number,"p_token_hash": string }; Returns: Json
                            },
@@ -339,6 +345,9 @@ isOneToOne: false
                            },
 "demo_register_personas":
 { Args: { "p_personas": Json,"p_slot": number }; Returns: number
+                           },
+"demo_renew_lease":
+{ Args: { "p_minutes": number,"p_slot": number,"p_token_hash": string }; Returns: Json
                            },
 "demo_reset_slot":
 { Args: { "p_fixture": Json,"p_slot": number }; Returns: Json

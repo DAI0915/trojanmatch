@@ -5,11 +5,11 @@ import { personaEmail } from "../lib/demo/personas";
 import { personaPassword } from "../lib/demo/password";
 
 config({ path: ".env.local", quiet: true });
-const [persona = "jordan", mode = "form"] = process.argv.slice(2);
+const [persona = "jordan", mode = "form", slotArg = "1"] = process.argv.slice(2);
 
 async function main() {
   const c = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-  const email = personaEmail(persona);
+  const email = personaEmail(persona, Number(slotArg));
   const { error } = await c.auth.signInWithPassword({ email, password: personaPassword(process.env.DEMO_PERSONA_SECRET!, email) });
   if (error) throw error;
   const { data: spaces } = await c.rpc("search_spaces", { p_query: "AI@USC" });

@@ -1,10 +1,12 @@
 /**
- * P3 presenter demo sandbox, end to end (runs at 1440px, then 375px).
- * Requires DEMO_PRESENTER_CODE (and DEV_TEST_PASSWORD for the prod-side check).
+ * Public, password-free demo (per-visitor sandboxes), end to end at 1440px and 375px.
+ * Each browser context uses its own fake client IP (x-forwarded-for) so per-visitor
+ * throttles don't interfere between tests. DEV_TEST_PASSWORD enables the prod-side check.
  */
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-const CODE = process.env.DEMO_PRESENTER_CODE ?? "";
+const DEMO_ON = process.env.DEMO_MODE_ENABLED === "true";
+const fakeIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250) + 1}`;
 const DEV_PASSWORD = process.env.DEV_TEST_PASSWORD ?? "";
 
 test.describe.configure({ mode: "serial" });
@@ -14,22 +16,33 @@ async function noHorizontalScroll(page: Page) {
   expect(overflow, `horizontal scroll on ${page.url()}`).toBe(false);
 }
 
-async function startDemo(browser: Browser, viewport: { width: number; height: number }) {
-  const context = await browser.newContext({ viewport });
+async function startDemo(browser: Browser, viewport: { width: number; height: number }, ip = fakeIp()) {
+  const context = await browser.newContext({ viewport, extraHTTPHeaders: { "x-forwarded-for": ip } });
   const page = await context.newPage();
   await page.goto("/demo");
-  await page.getByLabel("Presenter code").fill(CODE);
-  await page.getByRole("button", { name: "Start presenter demo" }).click();
+  await page.getByRole("button", { name: "Try Interactive Demo" }).click();
   await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+  // The optional guide opens once after a new start.
+  const guide = page.getByTestId("demo-guide");
+  await expect(guide).toBeVisible();
+  await guide.getByRole("button", { name: "Start exploring" }).click();
+  await expect(guide).toHaveCount(0);
   return { context, page };
+}
+
+async function switchVia(page: Page, button: RegExp, fullName: string) {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: button }).click();
+  await expect(page).toHaveURL(/\/spaces$/);
+  await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText(`You are ${fullName}`);
 }
 
 async function openNav(page: Page, viewportWidth: number) {
   if (viewportWidth < 1024) await page.getByRole("button", { name: "Open navigation" }).click();
 }
 
-test.describe("P3 presenter demo sandbox", () => {
-  test.skip(!CODE, "DEMO_PRESENTER_CODE not set");
+test.describe("Public demo sandboxes", () => {
+  test.skip(!DEMO_ON, "DEMO_MODE_ENABLED is not true");
   test.setTimeout(180_000);
 
   test("rejects unauthorized demo requests", async ({ playwright, baseURL }) => {
@@ -39,15 +52,16 @@ test.describe("P3 presenter demo sandbox", () => {
       expect(res.status(), path).toBe(401);
       expect((await res.json()).error.code).toBe("DEMO_LEASE_INVALID");
     }
-    // One wrong attempt per run (desktop only) so repeated runs never exhaust the presenter's throttle.
-    if (test.info().project.name === "demo-desktop") {
-      const wrong = await api.post("/api/demo/start", { data: { code: "definitely-not-the-code" } });
-      expect(wrong.status()).toBe(400);
-      expect((await wrong.json()).error.code).toBe("INVALID_CODE");
-    }
-    // Cross-origin bootstrap is refused even with the right code.
+    // A forged/foreign lease cookie is rejected too.
+    const forged = await playwright.request.newContext({
+      baseURL,
+      extraHTTPHeaders: { origin: new URL(baseURL!).origin, cookie: `tm_demo_lease=1.${"A".repeat(43)}` },
+    });
+    expect((await forged.post("/api/demo/reset", { data: {} })).status()).toBe(401);
+    // Cross-origin bootstrap is refused (no sandbox is created for another site).
     const xorigin = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { origin: "https://evil.example" } });
-    expect((await xorigin.post("/api/demo/start", { data: { code: CODE } })).status()).toBe(403);
+    expect((await xorigin.post("/api/demo/start", { data: {} })).status()).toBe(403);
+    await forged.dispose();
     await api.dispose();
     await xorigin.dispose();
   });
@@ -59,7 +73,7 @@ test.describe("P3 presenter demo sandbox", () => {
 
     // Presenter authentication + synthetic labeling.
     const banner = page.getByRole("status").filter({ hasText: "Demo Mode" });
-    await expect(banner).toContainText("You are Jordan Lee (synthetic persona)");
+    await expect(banner).toContainText("You are Jordan Lee");
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("spaces"), fullPage: true });
 
@@ -114,7 +128,7 @@ test.describe("P3 presenter demo sandbox", () => {
     await page.getByRole("button", { name: /^M Maya/ }).click();
     await expect(page).toHaveURL(/\/spaces$/);
     await page.goto("/spaces?type=hackathon");
-    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Maya Chen (synthetic persona)");
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Maya Chen");
     await expect(page.getByRole("link", { name: /TreeHacks 2027/ })).toBeVisible();
 
     // Profile persistence within the sandbox (as Maya), restored by reset.
@@ -125,43 +139,53 @@ test.describe("P3 presenter demo sandbox", () => {
     await page.reload();
     await expect(page.getByLabel("University")).toHaveValue("Demo University");
 
-    // Reset: TreeHacks 2027 disappears, counts and profiles are restored; Maya stays signed in.
+    // A second visitor (another browser, another IP) gets a DIFFERENT private sandbox;
+    // the first visitor's session and data are unaffected, in both directions.
+    const second = await startDemo(browser, viewport);
+    await second.page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await expect(second.page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await page.goto("/profile");
+    await expect(page.getByLabel("University")).toHaveValue("Demo University"); // still Maya, still her edit
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Maya Chen");
+    // The second visitor restarts THEIR sandbox: the first is not reset or signed out.
+    const secondRestart = await second.page.request.post("/api/demo/reset", { headers: { origin: new URL(second.page.url()).origin }, data: {} });
+    expect(secondRestart.status()).toBe(200);
+    await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
+    await expect(page.getByRole("link", { name: /TreeHacks 2027/ })).toBeVisible();
+    expect((await page.request.get("/api/profile")).status()).toBe(200);
+
+    // Restart (own sandbox): TreeHacks 2027 disappears, profiles are restored, and we're Jordan again.
     await page.goto("/demo");
     page.once("dialog", (d) => d.accept());
-    await page.getByRole("button", { name: "Reset demo" }).click();
-    await expect(page.getByText("Demo sandbox reset.")).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Restart demo" }).click();
+    await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+    await page.getByTestId("demo-guide").getByRole("button", { name: "Start exploring" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Jordan Lee");
     await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
     await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    // Maya's profile edit was undone by the restart.
+    await switchVia(page, /^M Maya/, "Maya Chen");
     await page.goto("/profile");
     await expect(page.getByLabel("University")).toHaveValue("USC");
 
-    // Switch back to Jordan via the controls.
-    await page.goto("/demo");
-    await page.getByRole("button", { name: /^J Jordan/ }).click();
-    await expect(page).toHaveURL(/\/spaces$/);
-    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toContainText("You are Jordan Lee (synthetic persona)");
-
-    // Re-lease from another browser invalidates this session on its next request.
-    // (The proxy may notice on a background request first, so the old browser can land on either page.)
-    const second = await startDemo(browser, viewport);
-    await page.goto("/spaces");
-    await expect(page).toHaveURL(/\/demo\?expired=1|\/sign-in/);
-    const after = await page.request.get("/api/profile");
-    expect(after.status()).toBe(401);
-    await page.goto("/demo");
-    await expect(page.getByRole("button", { name: "Start presenter demo" })).toBeVisible();
-    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toHaveCount(0);
-
-    // End the demo cleanly from the second browser.
+    // Ending a demo releases only that visitor's sandbox.
     await second.page.goto("/demo");
     await second.page.getByRole("button", { name: "End demo" }).click();
-    await expect(second.page.getByRole("button", { name: "Start presenter demo" })).toBeVisible();
+    await expect(second.page.getByRole("button", { name: "Try Interactive Demo" })).toBeVisible();
+    expect((await page.request.get("/api/profile")).status()).toBe(200);
+
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "End demo" }).click();
+    await expect(page.getByRole("button", { name: "Try Interactive Demo" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Demo Mode" })).toHaveCount(0);
+    // After ending, the old session can't reach the app or the demo API.
+    expect((await page.request.get("/api/profile")).status()).toBe(401);
 
     await context.close();
     await second.context.close();
   });
 
-  test("11 consecutive create → reset cycles never hit the Space-creation limit", async ({ browser }, info) => {
+  test("create → restart cycles reset Space limits; restarts are throttled per sandbox", async ({ browser }, info) => {
     test.skip(info.project.name !== "demo-desktop", "API-level check; one viewport is enough");
     const { context, page } = await startDemo(browser, { width: 1440, height: 900 });
     const headers = { origin: new URL(page.url()).origin };
@@ -169,18 +193,52 @@ test.describe("P3 presenter demo sandbox", () => {
       type: "hackathon", title: "TreeHacks", edition_year: 2027, start_date: "2027-02-14", end_date: "2027-02-16",
       timezone: "America/Los_Angeles", format: "in_person", visibility: "public",
     };
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 6; i++) {
       const created = await page.request.post("/api/spaces", { headers, data: payload });
       expect(created.status(), `create #${i}: ${await created.text()}`).toBe(201);
       const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
       expect(reset.status(), `reset #${i}`).toBe(200);
       expect((await reset.json()).cleared_create_limits, `reset #${i}`).toBe(1);
     }
-    // The sandbox is back to its starting state.
+    // The 7th restart within an hour is refused (429), and nothing was reset.
+    expect((await page.request.post("/api/spaces", { headers, data: payload })).status()).toBe(201);
+    const limited = await page.request.post("/api/demo/reset", { headers, data: {} });
+    expect(limited.status()).toBe(429);
+    expect((await limited.json()).error.code).toBe("RATE_LIMITED");
     await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
-    await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /TreeHacks 2027/ })).toBeVisible();
     await page.request.post("/api/demo/end", { headers, data: {} });
     await context.close();
+  });
+
+  test("starts are throttled per visitor and the pool never double-books", async ({ playwright, baseURL }, info) => {
+    test.skip(info.project.name !== "demo-desktop", "API-level check; one viewport is enough");
+    const ip = fakeIp();
+    const origin = new URL(baseURL!).origin;
+    const results: number[] = [];
+    const messages: string[] = [];
+    const contexts = [];
+    for (let i = 0; i < 7; i++) {
+      const api = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { origin, "x-forwarded-for": ip } });
+      contexts.push(api);
+      const res = await api.post("/api/demo/start", { data: {} });
+      results.push(res.status());
+      messages.push(res.ok() ? "" : (await res.json()).error.message);
+    }
+    // At most DEMO_MAX_SESSIONS_PER_VISITOR (2) sandboxes; the 7th start in an hour is throttled.
+    expect(results.filter((s) => s === 200).length).toBeLessThanOrEqual(2);
+    expect(results.slice(0, 2)).toEqual([200, 200]);
+    expect(results[2]).toBe(429);
+    expect(messages[2]).toMatch(/already have demo sessions open/);
+    expect(results[6]).toBe(429);
+    expect(messages[6]).toMatch(/started several demos recently/);
+    // A different visitor is unaffected by that visitor's throttle.
+    const other = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { origin, "x-forwarded-for": fakeIp() } });
+    expect((await other.post("/api/demo/start", { data: {} })).status()).toBe(200);
+    for (const c of [...contexts, other]) {
+      await c.post("/api/demo/end", { data: {} });
+      await c.dispose();
+    }
   });
 
   test("H: demo sandbox has valid recruiting teams; presenter teams vanish on reset", async ({ browser }, info) => {
@@ -353,7 +411,7 @@ test.describe("P3 presenter demo sandbox", () => {
       await page.goto("/demo");
       await page.getByRole("button", { name: button }).click();
       await expect(page).toHaveURL(/\/spaces$/);
-      await expect(banner).toContainText(`You are ${fullName} (synthetic persona)`);
+      await expect(banner).toContainText(`You are ${fullName} `);
     };
 
     // Setup: TreeHacks 2027 created live; 6 synthetic students join (Maya, Priya and Alex arrive first).
@@ -528,10 +586,12 @@ test.describe("P3 presenter demo sandbox", () => {
     await expect(page.getByTestId("team-capacity")).toHaveText("3 of 4 · 1 open position");
     await expect(page.getByTestId("member-list")).toContainText("Jordan Lee");
 
-    // I. Reset restores the seeded state: no TreeHacks 2027, no invitations, Campus Compass back to 2 of 4.
+    // I. Restart restores the seeded state (and signs back in as Jordan): no TreeHacks 2027,
+    // no invitations, Campus Compass back to 2 of 4.
     const reset = await page.request.post("/api/demo/reset", { headers, data: {} });
     expect(reset.status()).toBe(200);
-    await switchTo(/^J Jordan/, "Jordan Lee");
+    await page.goto("/spaces");
+    await expect(banner).toContainText("You are Jordan Lee");
     await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
     await expect(page.getByRole("heading", { name: "No matching spaces found" }).first()).toBeVisible();
     await page.goto("/invitations");
@@ -561,7 +621,7 @@ test.describe("P3 presenter demo sandbox", () => {
       await page.goto("/demo");
       await page.getByRole("button", { name: button }).click();
       await expect(page).toHaveURL(/\/spaces$/);
-      await expect(banner).toContainText(`You are ${fullName} (synthetic persona)`);
+      await expect(banner).toContainText(`You are ${fullName} `);
     };
     const live = async () => {
       if (mobile) await page.getByRole("tab", { name: "Chat" }).click();

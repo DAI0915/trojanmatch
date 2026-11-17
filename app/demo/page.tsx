@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
-import { FlaskConical, ShieldCheck } from "lucide-react";
+import { Clock, FlaskConical, Lock, PlayCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DemoControls } from "@/components/demo/demo-controls";
-import { DemoStartForm } from "@/components/demo/demo-start-form";
+import { TryDemoButton } from "@/components/demo/try-demo-button";
 import { serverFlags } from "@/lib/env";
-import { LEASE_COOKIE, parseLeaseCookie } from "@/lib/demo/personas";
+import { LEASE_COOKIE, parseLeaseCookie, parsePersonaEmail } from "@/lib/demo/personas";
 import { sha256Hex } from "@/lib/demo/crypto";
 import { getCurrentUser } from "@/lib/supabase/server";
+
+export const metadata = { title: "Interactive demo · TrojanMatch" };
+
+const VIDEO_URL = "https://youtu.be/u0y4W5DaLL0";
 
 export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
   await connection();
@@ -21,7 +25,6 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
   const scope = (user?.app_metadata as { scope?: string } | undefined)?.scope ?? null;
   const isDemoUser = !!user && !!scope?.startsWith("demo:");
   let leaseValid = false;
-  const leasedUntil: string | null = null;
   let spaces: { id: string; title: string; participant_count: number }[] = [];
 
   if (isDemoUser) {
@@ -35,12 +38,12 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
       spaces = (data ?? []).map((s) => ({ id: s.id, title: s.title, participant_count: Number(s.participant_count) }));
     }
   }
-  const personaKey = isDemoUser && user?.email ? user.email.split(".s")[0] : null;
+  const personaKey = isDemoUser ? (parsePersonaEmail(user?.email)?.key ?? null) : null;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:py-10">
       <div className="flex items-center justify-between gap-4">
-        <Logo href={isDemoUser ? "/spaces" : "/"} prefetch={false} />
+        <Logo href={isDemoUser && leaseValid ? "/spaces" : "/"} prefetch={false} />
         {isDemoUser && leaseValid && (
           <Link href="/spaces" prefetch={false} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Back to app
@@ -51,47 +54,75 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
       {!DEMO_MODE_ENABLED ? (
         <EmptyState
           icon={FlaskConical}
-          title="Demo Mode isn't available"
-          description="Demo Mode uses clearly labeled synthetic participants in an isolated sandbox. It is turned off on this deployment."
+          title="The interactive demo isn't available"
+          description="It is turned off on this deployment. You can still watch the recorded walkthrough."
         >
-          <Link href="/" className={buttonVariants({ variant: "outline" })}>
-            Back to home
-          </Link>
+          <a href={VIDEO_URL} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
+            Watch the demo video
+          </a>
         </EmptyState>
       ) : isDemoUser && leaseValid ? (
         <>
           <header>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-gold-foreground">Presenter sandbox</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-gold-foreground">Your private sandbox</p>
             <h1 className="text-2xl font-semibold tracking-tight">Demo controls</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Everything here is synthetic and isolated from real students. Spaces you create during the demo disappear on reset.
+              Everything here is synthetic and only visible to you. Restarting affects only your sandbox; other visitors and
+              real students are never touched.
             </p>
           </header>
-          <DemoControls currentPersona={personaKey} spaces={spaces} leasedUntil={leasedUntil} />
+          <DemoControls currentPersona={personaKey} spaces={spaces} />
         </>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-[1fr_18rem]">
+        <div className="grid gap-6 sm:grid-cols-[1fr_17rem]">
           <section className="rounded-xl border bg-card p-5 sm:p-6">
-            <h1 className="text-xl font-semibold tracking-tight">Presenter demo</h1>
-            <p className="mb-5 mt-1 text-sm text-muted-foreground">
-              Starts an isolated sandbox with ~44 clearly labeled synthetic students, then signs you in as the synthetic
-              persona Jordan.
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Interactive demo</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Try TrojanMatch in one click</h1>
+            <p className="mb-5 mt-2 text-sm text-muted-foreground">
+              No sign-up or password. You get a private sandbox with about 44 synthetic students and start as Jordan Lee.
+              Generate a team, invite people, switch personas to accept, then open the team workspace and AI Kickoff.
             </p>
             {sp.expired === "1" && (
               <p role="status" className="mb-4 rounded-md bg-brand-gold/15 px-3 py-2 text-sm">
-                Your demo session ended (it expired, or the demo was started from another browser).
+                Your demo session ended (it expired or was idle for 30 minutes). Start a fresh one below.
               </p>
             )}
-            <DemoStartForm signedInAsReal={!!user && !isDemoUser} />
+            {!!user && !isDemoUser && (
+              <p className="mb-3 text-xs text-muted-foreground">Starting the demo signs this browser out of your own account.</p>
+            )}
+            <TryDemoButton />
+            <p className="mt-4 text-xs text-muted-foreground">
+              Prefer a video?{" "}
+              <a href={VIDEO_URL} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
+                Watch the 3-minute walkthrough
+              </a>
+              .
+            </p>
           </section>
           <aside className="flex flex-col gap-3 text-sm text-muted-foreground">
             <p className="flex gap-2">
+              <Lock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              Your sandbox is yours alone. Other visitors can&apos;t see, change or reset it.
+            </p>
+            <p className="flex gap-2">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              Demo data lives in a separate sandbox scope. Production students never see it, and it never sees them.
+              Demo data lives in an isolated scope. Real students never see it, and it never sees them.
             </p>
             <p className="flex gap-2">
               <FlaskConical className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              Every synthetic person and simulated join is labeled in the interface.
+              Every person in the demo is synthetic and labeled that way.
+            </p>
+            <p className="flex gap-2">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              AI Kickoff uses Gemini within a small demo budget, then a labeled template.
+            </p>
+            <p className="flex gap-2">
+              <Clock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              Sessions last up to an hour and end after 30 idle minutes.
+            </p>
+            <p className="flex gap-2">
+              <PlayCircle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              Restart anytime from Demo controls.
             </p>
           </aside>
         </div>
