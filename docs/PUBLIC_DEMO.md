@@ -62,9 +62,12 @@ npx tsx scripts/seed-demo.ts --env .env.cloud.local --slots 1-10
 #     DEMO_PRESENTER_CODE is no longer read; keep it until the new demo is stable so a rollback works.)
 vercel --prod --scope dai0915
 
-# 4. Verify with low traffic (one IP: keep it to a few starts)
+# 4. Smoke test (all from one IP: 4 sandbox starts in total, within DEMO_STARTS_PER_HOUR=6)
+#    Two full recruiter sessions (1440px and 375px), then two simultaneous visitors.
 E2E_BASE_URL=https://trojanmatch-jade.vercel.app npx playwright test tests/e2e/demo-recruiter.spec.ts \
-  --project=demo-desktop -g "landing|two visitors"
+  --project=demo-desktop --project=demo-mobile -g "landing"
+E2E_BASE_URL=https://trojanmatch-jade.vercel.app npx playwright test tests/e2e/demo-recruiter.spec.ts \
+  --project=demo-desktop -g "two visitors"
 ```
 
 Rollback: promote the previous Vercel deployment. Migration 0011 is additive. The old code only uses

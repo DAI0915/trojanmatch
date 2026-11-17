@@ -214,7 +214,11 @@ test.describe("Recruiter demo journey", () => {
   });
 
   test("an idle session expires and the visitor is sent back to start a new one", async ({ browser }, info) => {
-    test.skip(!process.env.SUPABASE_DB_URL || !/localhost|127\.0\.0\.1/.test(process.env.SUPABASE_DB_URL), "needs the local database");
+    const local = /localhost|127\.0\.0\.1/;
+    test.skip(
+      !process.env.SUPABASE_DB_URL || !local.test(process.env.SUPABASE_DB_URL) || !local.test(process.env.E2E_BASE_URL ?? "http://localhost:3000"),
+      "needs a local app AND the local database (it ages a lease directly in the DB)",
+    );
     const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
     const { context, page } = await visitor(browser, viewport);
     await page.goto("/demo");
