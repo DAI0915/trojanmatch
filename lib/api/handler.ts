@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { z } from "zod";
 import { publicEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, retryAfterSeconds } from "@/lib/api/errors";
 import { isAllowedOrigin } from "@/lib/api/origin";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -19,9 +19,10 @@ export type AuthedContext<P> = {
 export function errorResponse(err: unknown) {
   const apiErr = err instanceof ApiError ? err : new ApiError("INTERNAL", "Something went wrong.");
   if (!(err instanceof ApiError)) console.error("[api] unexpected error", err);
+  const retryAfter = retryAfterSeconds(apiErr.details);
   return NextResponse.json(
     { error: { code: apiErr.code, message: apiErr.message, details: apiErr.details } },
-    { status: apiErr.status },
+    { status: apiErr.status, headers: retryAfter ? { "retry-after": String(retryAfter) } : undefined },
   );
 }
 

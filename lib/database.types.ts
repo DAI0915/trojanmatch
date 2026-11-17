@@ -343,6 +343,9 @@ isOneToOne: false
 "demo_rate_record":
 { Args: { "p_kind": string,"p_subject": string }; Returns: undefined
                            },
+"demo_rate_take":
+{ Args: { "p_kind": string,"p_max": number,"p_subject": string,"p_window_minutes": number }; Returns: Json
+                           },
 "demo_register_personas":
 { Args: { "p_personas": Json,"p_slot": number }; Returns: number
                            },

@@ -41,6 +41,14 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user && !isPublicPath(pathname)) {
+    // A demo visitor whose session ended (idle/expired, or a concurrent request already
+    // signed it out) goes back to the demo page, never to the sign-in form. /demo then
+    // offers "Resume your demo" if the sandbox lease is still valid, or a fresh start.
+    if (!isApi && parseLeaseCookie(request.cookies.get(LEASE_COOKIE)?.value)) {
+      const out = NextResponse.redirect(new URL("/demo?expired=1", request.url));
+      carryCookies(getResponse(), out);
+      return out;
+    }
     if (isApi) {
       return NextResponse.json(
         { error: { code: "NOT_AUTHENTICATED", message: "Sign in required." } },

@@ -10,11 +10,12 @@ import { TryDemoButton } from "@/components/demo/try-demo-button";
 import { serverFlags } from "@/lib/env";
 import { LEASE_COOKIE, parseLeaseCookie, parsePersonaEmail } from "@/lib/demo/personas";
 import { sha256Hex } from "@/lib/demo/crypto";
+import { DEMO_VIDEO_URL } from "@/lib/demo/links";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 export const metadata = { title: "Interactive demo · TrojanMatch" };
 
-const VIDEO_URL = "https://youtu.be/u0y4W5DaLL0";
+const VIDEO_URL = DEMO_VIDEO_URL;
 
 export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
   await connection();
@@ -84,7 +85,8 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
             </p>
             {sp.expired === "1" && (
               <p role="status" className="mb-4 rounded-md bg-brand-gold/15 px-3 py-2 text-sm">
-                Your demo session ended (it expired or was idle for 30 minutes). Start a fresh one below.
+                Your demo session ended (it expired, was idle for 30 minutes, or was signed out). If your sandbox is still
+                open you can resume it below; otherwise start a fresh one.
               </p>
             )}
             {!!user && !isDemoUser && (

@@ -31,7 +31,10 @@ export const POST = withDemo(async ({ cfg, admin }) => {
   }
 
   const subject = await clientSubject(cfg);
-  await rateLimit(admin, subject, "demo_start", cfg.DEMO_STARTS_PER_HOUR, 60, "You've started several demos recently. Please try again later.");
+  await rateLimit(
+    admin, subject, "demo_start", cfg.DEMO_STARTS_PER_HOUR, 60,
+    "You've reached the hourly limit for new demo sandboxes from this network.",
+  );
 
   const token = newLeaseToken();
   const hash = sha256Hex(token);
@@ -43,7 +46,11 @@ export const POST = withDemo(async ({ cfg, admin }) => {
   const r = data as Acquire;
   if (!r.ok || !r.slot) {
     if (r.error === "TOO_MANY_SESSIONS") {
-      throw new ApiError("RATE_LIMITED", "You already have demo sessions open in other browsers. Use one of them, or try again later.");
+      throw new ApiError(
+        "RATE_LIMITED",
+        "You already have demo sandboxes open in other browsers or tabs. Continue in one of them, or wait until one ends (30 minutes after its last use).",
+        { reason: "TOO_MANY_SESSIONS" },
+      );
     }
     throw new ApiError("DEMO_BUSY", "All demo sandboxes are in use right now. Please try again in a few minutes.", { retry_at: r.retry_at ?? null });
   }

@@ -104,14 +104,18 @@ export async function clientSubject(cfg: Cfg) {
   return `demo:${sha256Hex(`${cfg.DEMO_PERSONA_SECRET}|${ip}`).slice(0, 32)}`;
 }
 
-/** Throttle: throws RATE_LIMITED if `subject` already did `kind` `max` times in the window; else records one. */
-export async function rateLimit(admin: Admin, subject: string, kind: string, max: number, windowMinutes: number, message: string) {
-  const { data: limited, error } = await admin.rpc("demo_rate_exceeded", {
-    p_subject: subject, p_kind: kind, p_max: max, p_window_minutes: windowMinutes,
+/**
+ * Throttle: atomically records one `kind` for `subject`, or throws RATE_LIMITED
+ * with `retry_at` (when this subject's own oldest counted event leaves the
+ * window) if it already did `kind` `max` times. Blocked attempts are not recorded.
+ */
+export async function rateLimit(admin: Admin, subject: string, kind: string, max: number, windowMin: number, message: string) {
+  const { data, error } = await admin.rpc("demo_rate_take", {
+    p_subject: subject, p_kind: kind, p_max: max, p_window_minutes: windowMin,
   });
   if (error) throw fromDbError(error);
-  if (limited) throw new ApiError("RATE_LIMITED", message);
-  await admin.rpc("demo_rate_record", { p_subject: subject, p_kind: kind });
+  const r = (data ?? {}) as { ok?: boolean; retry_at?: string | null };
+  if (!r.ok) throw new ApiError("RATE_LIMITED", message, { retry_at: r.retry_at ?? null });
 }
 
 /** Rate-limit subject for actions inside one sandbox lease. */

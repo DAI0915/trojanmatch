@@ -229,9 +229,29 @@ test.describe("Public demo sandboxes", () => {
     expect(results.filter((s) => s === 200).length).toBeLessThanOrEqual(2);
     expect(results.slice(0, 2)).toEqual([200, 200]);
     expect(results[2]).toBe(429);
-    expect(messages[2]).toMatch(/already have demo sessions open/);
+    expect(messages[2]).toMatch(/already have demo sandboxes open/);
     expect(results[6]).toBe(429);
-    expect(messages[6]).toMatch(/started several demos recently/);
+    expect(messages[6]).toMatch(/hourly limit for new demo sandboxes/);
+
+    // The throttled response says exactly when this visitor may start again (and nothing else).
+    const blocked = await contexts[6].post("/api/demo/start", { data: {} });
+    expect(blocked.status()).toBe(429);
+    const retryAfter = Number(blocked.headers()["retry-after"]);
+    const details = (await blocked.json()).error.details as { retry_at: string };
+    expect(Object.keys(details)).toEqual(["retry_at"]);
+    const untilRetry = (Date.parse(details.retry_at) - Date.now()) / 1000;
+    expect(retryAfter).toBeGreaterThan(3000); // the first start was moments ago: ~1 hour
+    expect(retryAfter).toBeLessThanOrEqual(3600);
+    expect(Math.abs(retryAfter - untilRetry)).toBeLessThan(10);
+
+    // A visitor who already has a sandbox resumes it even while throttled, without using a start…
+    const resumed = await contexts[0].post("/api/demo/start", { data: {} });
+    expect(resumed.status()).toBe(200);
+    expect((await resumed.json()).resumed).toBe(true);
+    // …and neither the resume nor repeated blocked clicks move the retry time.
+    for (let i = 0; i < 3; i++) await contexts[6].post("/api/demo/start", { data: {} });
+    const again = await contexts[6].post("/api/demo/start", { data: {} });
+    expect((await again.json()).error.details.retry_at).toBe(details.retry_at);
     // A different visitor is unaffected by that visitor's throttle.
     const other = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { origin, "x-forwarded-for": fakeIp() } });
     expect((await other.post("/api/demo/start", { data: {} })).status()).toBe(200);

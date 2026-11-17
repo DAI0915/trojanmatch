@@ -80,3 +80,11 @@ export function fromDbError(err: { message?: string; code?: string } | null | un
   if (err?.code === "40P01" || err?.code === "40001") return new ApiError("TRY_AGAIN", "Someone else changed this team at the same moment. Please try again.");
   return new ApiError("INTERNAL", "Something went wrong.");
 }
+
+/** Seconds until `details.retry_at` (an ISO time), for a Retry-After header; null if absent/past. */
+export function retryAfterSeconds(details: unknown, now = Date.now()): number | null {
+  const at = (details as { retry_at?: unknown } | null | undefined)?.retry_at;
+  if (typeof at !== "string") return null;
+  const t = Date.parse(at);
+  return Number.isFinite(t) ? Math.max(1, Math.ceil((t - now) / 1000)) : null;
+}

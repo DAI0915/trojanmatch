@@ -288,6 +288,86 @@ test.describe("Recruiter demo journey", () => {
     await context.close();
   });
 
+  test("throttled visitor: accurate retry time, video alternative, no extra sessions; an open sandbox still resumes", async ({ browser, playwright, baseURL }, info) => {
+    // Uses up one visitor's hourly starts on purpose: only against a local app, where a fake client IP is honored.
+    test.skip(!/localhost|127\.0\.0\.1/.test(baseURL ?? ""), "exhausts a visitor's start quota; local app only");
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/recruiter-${n}-${info.project.name}.png`;
+    const ip = fakeIp();
+    const origin = new URL(baseURL!).origin;
+    const newVisitor = async () => {
+      const context = await browser.newContext({ viewport, extraHTTPHeaders: { "x-forwarded-for": ip } });
+      return { context, page: await context.newPage() };
+    };
+
+    // 1. A starts a sandbox from the landing page.
+    const a = await newVisitor();
+    await a.page.goto("/");
+    await a.page.getByTestId("try-demo").click();
+    await expect(a.page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+
+    // 2. The same network uses up the rest of its hourly starts (6 in total). Each attempt is a fresh
+    //    client with no cookies (a client WITH a sandbox would simply resume it).
+    const clients: Awaited<ReturnType<typeof playwright.request.newContext>>[] = [];
+    const fresh = async () => {
+      const c = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { origin, "x-forwarded-for": ip } });
+      clients.push(c);
+      return c;
+    };
+    const tryStart = async () => (await fresh()).post("/api/demo/start", { data: {} });
+    let blockedAt: string | null = null;
+    for (let i = 0; i < 7 && !blockedAt; i++) {
+      const res = await tryStart();
+      if (res.status() === 429) blockedAt = (await res.json()).error.details?.retry_at ?? null;
+    }
+    expect(blockedAt, "the network's hourly starts should be used up").not.toBeNull();
+
+    // 3. B (same network, no sandbox) double-clicks: one clear message, an accurate time, the video, no new session.
+    const b = await newVisitor();
+    await b.page.goto("/");
+    await b.page.waitForLoadState("networkidle");
+    await b.page.getByTestId("try-demo").dblclick();
+    const panel = b.page.getByTestId("try-demo-blocked");
+    await expect(panel).toBeVisible({ timeout: 20_000 });
+    await expect(panel).toHaveAttribute("data-kind", "limit");
+    await expect(panel).toContainText("Demo limit reached for your network");
+    const local = await b.page.evaluate((t) => new Date(t).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), blockedAt!);
+    await expect(b.page.getByTestId("try-demo-retry")).toContainText(`You can start a new demo at ${local} (in `);
+    await expect(panel.getByRole("link", { name: "Watch the 3-minute video" })).toHaveAttribute("href", /youtu/);
+    await expect(b.page.getByTestId("try-demo")).toBeDisabled();
+    await noHorizontalScroll(b.page);
+    await b.page.screenshot({ path: shot("throttled"), fullPage: false });
+    const after = await tryStart();
+    expect(after.status()).toBe(429);
+    expect(after.headers()["retry-after"]).toMatch(/^\d+$/);
+    expect((await after.json()).error.details.retry_at, "clicks while throttled must not move the retry time").toBe(blockedAt);
+
+    // 4. A still holds a sandbox. Signed in, the landing page leads straight back into the app…
+    await a.page.goto("/");
+    await expect(a.page.getByRole("link", { name: /Open app/ }).first()).toBeVisible();
+    await expect(a.page.getByTestId("try-demo")).toHaveCount(0);
+    // …and if the app session is gone but the sandbox lease isn't, it offers to resume (no new start needed).
+    const lease = (await a.context.cookies()).filter((c) => c.name === "tm_demo_lease");
+    expect(lease).toHaveLength(1);
+    await a.context.clearCookies();
+    await a.context.addCookies(lease);
+    // Opening an app page sends the visitor to the demo page (never to the sign-in form)…
+    await a.page.goto("/spaces");
+    await expect(a.page).toHaveURL(/\/demo\?expired=1$/);
+    await expect(a.page.getByTestId("try-demo")).toHaveText(/Resume your demo/);
+    // …and the landing page offers the same.
+    await a.page.goto("/");
+    const resume = a.page.getByTestId("try-demo");
+    await expect(resume).toHaveText(/Resume your demo/);
+    await resume.click();
+    await expect(a.page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+    await expect(bar(a.page)).toContainText("You are Jordan Lee");
+    expect((await (await tryStart()).json()).error.details.retry_at).toBe(blockedAt);
+
+    for (const c of [a.page.request, ...clients]) await c.post("/api/demo/end", { headers: { origin }, data: {} });
+    await Promise.all([a.context.close(), b.context.close(), ...clients.map((c) => c.dispose())]);
+  });
+
   test("two visitors at the same time get separate sandboxes and can't affect each other", async ({ browser }, info) => {
     const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
     const [a, b] = await Promise.all([visitor(browser, viewport), visitor(browser, viewport)]);

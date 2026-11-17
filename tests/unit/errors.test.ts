@@ -23,3 +23,16 @@ describe("fromDbError", () => {
     expect(new ApiError("RATE_LIMITED", "x").status).toBe(429);
   });
 });
+
+describe("Retry-After", () => {
+  it("is the whole seconds until details.retry_at, at least 1, and absent otherwise", async () => {
+    const { retryAfterSeconds } = await import("@/lib/api/errors");
+    const now = Date.parse("2026-11-17T22:00:00Z");
+    expect(retryAfterSeconds({ retry_at: "2026-11-17T22:10:00.400Z" }, now)).toBe(601);
+    expect(retryAfterSeconds({ retry_at: "2026-11-17T21:59:00Z" }, now)).toBe(1);
+    expect(retryAfterSeconds({ retry_at: null }, now)).toBeNull();
+    expect(retryAfterSeconds({ reason: "TOO_MANY_SESSIONS" }, now)).toBeNull();
+    expect(retryAfterSeconds(undefined, now)).toBeNull();
+    expect(retryAfterSeconds({ retry_at: "not a date" }, now)).toBeNull();
+  });
+});

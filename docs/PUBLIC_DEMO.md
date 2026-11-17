@@ -14,6 +14,14 @@ Demo** and gets their **own** sandbox.
    - It resets **that slot only** to the synthetic fixture, signs in as Jordan, and sets the
      httpOnly `tm_demo_lease` cookie.
    - If no slot is free, it returns `503 DEMO_BUSY` with a retry time. The UI offers the video instead.
+   - The per-visitor throttle (`demo_rate_take`, migration 0012) is atomic and, when reached, returns
+     `429 RATE_LIMITED` with `details.retry_at` and a `Retry-After` header: the moment this visitor's
+     own oldest counted start leaves the hour (nothing about other visitors). Blocked attempts are not
+     recorded, so retrying never pushes the time back. The UI shows the local time and a countdown,
+     disables the button until then, and offers the video.
+   - A browser that already holds a valid lease always **resumes** it, even while throttled, without
+     using a start. The landing and demo pages show **Resume your demo** in that case, and a demo
+     visitor whose app session ended is sent to `/demo?expired=1` (never to the sign-in form).
 2. `proxy.ts` calls `demo_lease_valid` on every request. It checks that the lease is the current one
    **for the caller's own slot**, and records activity at most once a minute. Invalid, expired or
    idle sessions are signed out and redirected to `/demo?expired=1`.
@@ -47,6 +55,12 @@ the cleanup step.
 - Restart/end is a separate, smaller link at the far end of the bar ("Restart or end demo" → `/demo`,
   with a confirmation).
 
+## Database changes (migration `20261117000012_demo_rate_take.sql`)
+
+Additive only: `public.demo_rate_take(subject, kind, max, window_minutes) → {ok} | {ok:false, retry_at}`,
+EXECUTE service_role only. Same ledger (`private.api_events`) and same limits as before; the old
+`demo_rate_exceeded` / `demo_rate_record` stay for rollback compatibility.
+
 ## Database changes (migration `20261116000011_public_demo_pool.sql`)
 
 Additive only. No data is deleted, no RLS policy changes, and applied migrations are not edited.
@@ -65,7 +79,7 @@ Additive only. No data is deleted, no RLS policy changes, and applied migrations
 ```bash
 git switch main && git merge --ff-only feature/public-demo && git push
 
-# 1. Database (review first; expect only 20261116000011)
+# 1. Database (review first; expect only the pending migration(s), e.g. 20261117000012)
 npx supabase db push --dry-run
 npx supabase db push
 
