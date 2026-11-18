@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --breakpoint-3xl: 112.5rem; /* 1800px: large desktop monitors (landing page scales up) */
+}
+
 @theme inline {
   --color-brand-gold: var(--brand-gold);
   --color-brand-gold-foreground: var(--brand-gold-foreground);

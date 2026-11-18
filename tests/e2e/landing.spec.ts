@@ -42,6 +42,9 @@ async function layout(page: Page) {
       windows,
       benefits,
       featuresBottom: box(document.getElementById("features"))!.bottom,
+      // Free space above the hero (under the header) and below the benefits row (above the footer).
+      gapTop: document.querySelector("main p")!.getBoundingClientRect().top - document.querySelector("header")!.getBoundingClientRect().bottom,
+      gapBottom: document.querySelector("footer")!.getBoundingClientRect().top - document.querySelector("#features ul")!.getBoundingClientRect().bottom,
       clipped: [...document.querySelectorAll("main h1, main p, #features h2")].filter((e) => {
         const el = e as HTMLElement;
         return el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== "hidden";
@@ -90,6 +93,10 @@ test.describe("Landing page @smoke", () => {
     // The showcase is one described image, nothing focusable inside.
     const showcase = page.getByRole("img", { name: /TrojanMatch preview with synthetic demo data/ });
     await expect(showcase).toBeVisible();
+    await expect(showcase).toHaveAccessibleName(/example messages/);
+    if ((page.viewportSize()?.width ?? 0) >= 520) {
+      await expect(page.locator("[data-window=workspace]")).toContainText("Example messages · synthetic demo");
+    }
     expect(await showcase.locator("a, button, input, [tabindex]").count()).toBe(0);
 
     // In-page and same-site navigation work.
@@ -143,6 +150,9 @@ test.describe("Landing page @smoke", () => {
         const tops = new Set(l.benefits.map((b) => Math.round(b.y)));
         expect(tops.size, "benefits in one row").toBe(1);
         expect(l.featuresBottom).toBeLessThanOrEqual(vp.height);
+        // Balanced composition: no heavy empty band under the benefits row.
+        expect(Math.abs(l.gapBottom - l.gapTop), `top ${l.gapTop}px vs bottom ${l.gapBottom}px`).toBeLessThanOrEqual(40);
+        expect(l.gapBottom).toBeLessThanOrEqual(vp.height * 0.15);
       }
 
       await page.screenshot({ path: `test-results/screens/landing-${vp.width}.png` });

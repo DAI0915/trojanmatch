@@ -122,7 +122,13 @@ function WorkspaceWindow({ className }: { className?: string }) {
           <span className="px-[0.6em] py-[0.45em] text-neutral-600">AI Kickoff</span>
           <span className="px-[0.6em] py-[0.45em] text-neutral-600">Team details</span>
         </div>
-        <ul className="mt-[1.8em] flex flex-col gap-[1.2em]">
+        {/* The demo has no stored chat: these lines are examples, and labeled as such. */}
+        <p className="mt-[1em] flex items-center gap-[0.6em] whitespace-nowrap text-[0.64em] font-medium text-neutral-500">
+          <span className="h-px flex-1 bg-black/[0.08]" />
+          Example messages · synthetic demo
+          <span className="h-px flex-1 bg-black/[0.08]" />
+        </p>
+        <ul className="mt-[1em] flex flex-col gap-[1.1em]">
           {MESSAGES.map((m) =>
             m.mine ? (
               <li key={m.body} className="flex flex-col items-end">
@@ -201,7 +207,7 @@ export function ProductShowcase({ className }: { className?: string }) {
   return (
     <div
       role="img"
-      aria-label="TrojanMatch preview with synthetic demo data: the Discover page for AI@USC Hackathon 2026 with Smart Team Formation, Find a Team and Grow My Team; a team workspace chat; and a recommended four-person team rated Team Fit: Strong."
+      aria-label="TrojanMatch preview with synthetic demo data: the Discover page for AI@USC Hackathon 2026 with Smart Team Formation, Find a Team and Grow My Team; a team workspace chat with example messages; and a recommended four-person team rated Team Fit: Strong."
       className={cn("@container w-full", className)}
       data-testid="product-showcase"
     >
