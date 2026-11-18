@@ -356,6 +356,12 @@ test.describe("Public demo sandboxes", () => {
     // D. Plain-language summary first; every computed detail one click away.
     await expect(page.getByTestId("match-label")).toHaveText(/(Strong|Good|Fair|Weak) match/);
     for (const k of ["skills", "goals", "schedule"]) await expect(page.getByTestId(`why-${k}`)).toBeVisible();
+    // The label never contradicts the cards: green only without weak spots; otherwise neutral + trade-offs.
+    const tone = await page.getByTestId("match-label").getAttribute("data-tone");
+    const weakCards = await page.locator('[data-testid^="why-"][data-tone="weak"]').count();
+    if (tone === "positive") expect(weakCards).toBe(0);
+    if (tone === "neutral") await expect(page.getByTestId("trade-offs")).toBeVisible();
+    else await expect(page.getByTestId("trade-offs")).toHaveCount(0);
     await expect(page.getByTestId("team-fit-score")).toBeHidden(); // internal numbers stay out of the default view
     await page.getByText("See detailed analysis").click();
     for (const d of ["skill", "goal", "interest", "schedule", "style"]) await expect(page.getByTestId(`dimension-${d}`)).toBeVisible();

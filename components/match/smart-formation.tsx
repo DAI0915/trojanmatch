@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, CalendarDays, Check, Loader2, RefreshCw, Send, SlidersHorizontal, Sparkles, Target, Trophy, UsersRound, X, Zap,
+  AlertTriangle, ArrowLeft, CalendarDays, Loader2, Scale, RefreshCw, Send, SlidersHorizontal, Sparkles, Target, Trophy, UsersRound, X, Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import { inputClass } from "@/components/forms/field";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import type { FormResponse, ReplaceResponse } from "@/lib/matching/service";
 import type { TeamView } from "@/lib/matching/view";
-import { matchLabel, teamSummary, whyThisTeam, type Tone, type WhyCard } from "@/lib/matching/why";
+import { matchPresentation, teamSummary, whyThisTeam, type MatchTone, type Tone, type WhyCard } from "@/lib/matching/why";
 import { cn } from "@/lib/utils";
 import { DeltaChip } from "./fit";
 import { DetailedAnalysis, type Change } from "./detailed-analysis";
@@ -41,11 +41,12 @@ type Saved = {
 /** A generated (never sent) recommendation survives normal navigation for this long, in this tab only. */
 const KEEP_MS = 30 * 60_000;
 
-const BAND_PILL: Record<TeamView["band"], { className: string; icon: LucideIcon }> = {
-  Strong: { className: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-900", icon: Trophy },
-  Good: { className: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-900", icon: Check },
-  Fair: { className: "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900", icon: AlertTriangle },
-  Weak: { className: "bg-muted text-muted-foreground ring-border", icon: AlertTriangle },
+/** Pill style follows the explanation, not just the band: a high band with weak spots is shown neutrally. */
+const TONE_PILL: Record<MatchTone, { className: string; icon: LucideIcon }> = {
+  positive: { className: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-900", icon: Trophy },
+  neutral: { className: "bg-muted text-foreground ring-border", icon: Scale },
+  caution: { className: "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900", icon: AlertTriangle },
+  low: { className: "bg-muted text-muted-foreground ring-border", icon: AlertTriangle },
 };
 
 const noSubscribe = () => () => {};
@@ -360,9 +361,15 @@ export function SmartFormation({
             </div>
             {current && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <MatchPill band={current.band} />
+                <MatchPill team={current} />
                 <p className="text-sm text-muted-foreground" data-testid="team-summary">{teamSummary(current)}</p>
               </div>
+            )}
+            {current && matchPresentation(current).tradeOff && (
+              <p className="flex gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm" data-testid="trade-offs">
+                <Scale className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span>{matchPresentation(current).tradeOff}</span>
+              </p>
             )}
             {current && result.proposals.length > 1 && (
               <p className="text-xs text-muted-foreground" data-testid="option-label">
@@ -609,12 +616,13 @@ export function SmartFormation({
   );
 }
 
-function MatchPill({ band }: { band: TeamView["band"] }) {
-  const { className, icon: Icon } = BAND_PILL[band];
+function MatchPill({ team }: { team: TeamView }) {
+  const p = matchPresentation(team);
+  const { className, icon: Icon } = TONE_PILL[p.tone];
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ring-1", className)} data-testid="match-label">
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ring-1", className)} data-testid="match-label" data-tone={p.tone}>
       <Icon className="size-4" aria-hidden />
-      {matchLabel(band)}
+      {p.label}
     </span>
   );
 }

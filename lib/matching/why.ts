@@ -96,3 +96,30 @@ export function teamSummary(t: TeamView): string {
 export function memberHighlight(reasons: string[]): string | null {
   return reasons.find((r) => !/^(Covers|Flexible)/.test(r)) ?? reasons[0] ?? null;
 }
+
+export type MatchTone = "positive" | "neutral" | "caution" | "low";
+export type MatchPresentation = { label: string; tone: MatchTone; tradeOff: string | null };
+
+/**
+ * How to present the engine's band without contradicting the explanation cards.
+ * The label is always the score-derived band. A Strong/Good team is shown as
+ * positive only when no card reports a weakness; otherwise it gets a neutral
+ * treatment and a short note on why the overall score is still high.
+ */
+export function matchPresentation(t: TeamView): MatchPresentation {
+  const label = matchLabel(t.band);
+  if (t.band === "Fair") return { label, tone: "caution", tradeOff: null };
+  if (t.band === "Weak") return { label, tone: "low", tradeOff: null };
+  const weak = whyThisTeam(t).filter((c) => c.tone === "weak");
+  if (weak.length === 0) return { label, tone: "positive", tradeOff: null };
+  const helped = [...t.dimensions]
+    .filter((d) => d.score >= 0.75)
+    .sort((a, b) => b.score - a.score || b.weight - a.weight)
+    .slice(0, 2)
+    .map((d) => d.label.toLowerCase());
+  const issues = list(weak.map((c) => c.title.toLowerCase()));
+  const why = helped.length
+    ? `The overall score is still ${t.band.toLowerCase()} because this team does well on ${list(helped)}`
+    : `The overall score balances all five factors`;
+  return { label, tone: "neutral", tradeOff: `${why}, but it has trade-offs to weigh before inviting: ${issues}.` };
+}

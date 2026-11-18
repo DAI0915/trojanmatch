@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemberView, TeamView } from "@/lib/matching/view";
-import { matchLabel, memberHighlight, teamSummary, whyThisTeam } from "@/lib/matching/why";
+import { matchLabel, matchPresentation, memberHighlight, teamSummary, whyThisTeam } from "@/lib/matching/why";
 
 const member = (name: string, goal: string | null, kind: MemberView["kind"] = "candidate"): MemberView => ({
   id: name, name, synthetic: true, kind, role: null, roles: [], skills: [], goal, experience: null, reasons: [],
@@ -88,5 +88,43 @@ describe("labels", () => {
     expect(memberHighlight(["Covers Backend", "Brings Python"])).toBe("Brings Python");
     expect(memberHighlight(["Covers Backend"])).toBe("Covers Backend");
     expect(memberHighlight([])).toBeNull();
+  });
+});
+
+describe("matchPresentation", () => {
+  const dims = (scores: Record<string, number>): TeamView["dimensions"] =>
+    Object.entries(scores).map(([key, score]) => ({ key: key as TeamView["dimensions"][number]["key"], label: key === "style" ? "Working style" : key === "interest" ? "Shared interests" : key, score, weight: 0.2, summary: "" }));
+
+  it("keeps a positive treatment when nothing is weak", () => {
+    expect(matchPresentation(team())).toEqual({ label: "Strong match", tone: "positive", tradeOff: null });
+    expect(matchPresentation(team({ band: "Good" })).tone).toBe("positive");
+  });
+
+  it("keeps the Good label but goes neutral and explains trade-offs when cards report weaknesses", () => {
+    const t = team({
+      band: "Good",
+      roles: [{ role: "AI / ML", level: "default", status: "missing", by: null }, { role: "Backend", level: "default", status: "covered", by: "You" }],
+      members: [member("A", "Win", "you"), member("B", "Learn"), member("C", "Ship"), member("D", null)],
+      schedule: { sharedHours: 2, targetHours: 4, windows: [], timeZone: "UTC" },
+      dimensions: dims({ style: 0.96, interest: 0.8, skill: 0.5 }),
+    });
+    const p = matchPresentation(t);
+    expect(p.label).toBe("Good match");
+    expect(p.tone).toBe("neutral");
+    expect(p.tradeOff).toBe(
+      "The overall score is still good because this team does well on working style and shared interests, but it has trade-offs to weigh before inviting: skill gaps, different goals and limited shared time.",
+    );
+  });
+
+  it("also tempers Strong when a card is weak, and never invents strengths", () => {
+    const t = team({ schedule: { sharedHours: 1, targetHours: 6, windows: [], timeZone: "UTC" }, dimensions: dims({ skill: 0.6 }) });
+    const p = matchPresentation(t);
+    expect(p).toMatchObject({ label: "Strong match", tone: "neutral" });
+    expect(p.tradeOff).toBe("The overall score balances all five factors, but it has trade-offs to weigh before inviting: limited shared time.");
+  });
+
+  it("leaves Fair and Weak labels as they are", () => {
+    expect(matchPresentation(team({ band: "Fair" }))).toEqual({ label: "Fair match", tone: "caution", tradeOff: null });
+    expect(matchPresentation(team({ band: "Weak" }))).toEqual({ label: "Weak match", tone: "low", tradeOff: null });
   });
 });
