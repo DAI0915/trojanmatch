@@ -108,9 +108,9 @@ test.describe("Recruiter demo journey", () => {
 
     // 3. Smart Team Formation + whole-team vs individual ranking.
     await page.getByRole("link", { name: /^Smart Team Formation/ }).click();
-    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    await page.getByRole("button", { name: "Generate team" }).click();
     await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
-    await page.getByText("Compare with simple individual ranking").click();
+    await page.getByText("See detailed analysis").click();
     const baseline = page.getByTestId("baseline");
     await expect(baseline.getByRole("row", { name: /Whole-team optimization/ })).toBeVisible();
     await expect(baseline.getByRole("row", { name: /Top individuals/ })).toBeVisible();

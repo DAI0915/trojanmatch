@@ -327,35 +327,45 @@ test.describe("Public demo sandboxes", () => {
     await page.getByRole("link", { name: /^Smart Team Formation/ }).click();
     await expect(page).toHaveURL(new RegExp(`/s/${slug}/smart$`));
 
-    // B. View eligible participants: consenting, team-less students of THIS Space only.
+    // B. Step 1 (preferences). Eligible participants live in a secondary, collapsed panel.
+    await expect(page.getByRole("heading", { level: 1, name: "Build your ideal team" })).toBeVisible();
+    await expect(page.getByTestId("send-invites")).toHaveCount(0); // no invitation bar before a recommendation
+    await expect(page.getByTestId("pool-summary")).toBeHidden();
+    await page.getByText("Who can be matched").click();
     await expect(page.getByTestId("pool-summary")).toHaveText("20 of 31 other participants can be suggested · 7 already on a team.");
-    await page.getByText("View eligible participants (20)").click();
     const list = page.getByTestId("pool-list");
     await expect(list.getByText("Maya Chen")).toBeVisible();
     await expect(list.getByText("Priya Raman")).toBeVisible();
     for (const hidden of ["Tom Becker", "Nina Petrova", "Victor Huang", "Olivia Brown", "Ethan Park", "Alex Morgan", "Jordan Lee"]) {
       await expect(list.getByText(hidden), hidden).toHaveCount(0);
     }
-    await page.getByText("View eligible participants (20)").click();
+    await page.getByText("Who can be matched").click();
 
-    // C. Generate a recommended team (draft: nobody invited, no team created).
-    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    // C. Generate a recommended team (step 2; draft: nobody invited, no team created).
+    await page.getByRole("button", { name: "Generate team" }).click();
     await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { level: 1, name: "Recommended team" })).toBeFocused();
+    await expect(page.getByTestId("formation-steps").locator('[aria-current="step"]')).toContainText("Review team");
     await expect(page.getByTestId("draft-status")).toHaveText("Draft proposal · nobody has been invited");
     await expect(page.getByTestId("member-card")).toHaveCount(4);
     await expect(page.locator('[data-testid="member-card"][data-kind="you"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid="member-card"][data-kind="you"]').getByRole("button", { name: /^Replace/ })).toHaveCount(0);
     await expect(page.locator('[data-testid="member-card"][data-kind="candidate"]')).toHaveCount(3);
-    await expect(page.getByText("Candidate · not invited")).toHaveCount(3);
+    await expect(page.getByTestId("member-kind").filter({ hasText: "Not invited yet" })).toHaveCount(3);
 
-    // D. Why these students complement one another.
-    await expect(page.getByTestId("team-fit-band")).toContainText("Team Fit:");
+    // D. Plain-language summary first; every computed detail one click away.
+    await expect(page.getByTestId("match-label")).toHaveText(/(Strong|Good|Fair|Weak) match/);
+    for (const k of ["skills", "goals", "schedule"]) await expect(page.getByTestId(`why-${k}`)).toBeVisible();
+    await expect(page.getByTestId("team-fit-score")).toBeHidden(); // internal numbers stay out of the default view
+    await page.getByText("See detailed analysis").click();
     for (const d of ["skill", "goal", "interest", "schedule", "style"]) await expect(page.getByTestId(`dimension-${d}`)).toBeVisible();
     await expect(page.getByRole("list", { name: "Role coverage" }).getByRole("listitem")).toHaveCount(4);
     await expect(page.getByTestId("role-covered").first()).toBeVisible();
     await expect(page.getByTestId("shared-hours")).toContainText("h/week");
-    await expect(page.locator('[data-kind="candidate"]').first().getByRole("listitem").first()).toContainText(/Covers|Flexible|Strengths|Brings/);
-    await page.getByText("Compare with simple individual ranking").click();
     await expect(page.getByTestId("baseline").getByRole("row")).toHaveCount(3);
+    const firstCard = page.locator('[data-kind="candidate"]').first();
+    await firstCard.getByRole("button", { name: /^Details/ }).click();
+    await expect(firstCard.getByTestId("member-details").getByRole("listitem").first()).toContainText(/Covers|Flexible|Strengths|Brings/);
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("proposal"), fullPage: true });
 
@@ -373,6 +383,30 @@ test.describe("Public demo sandboxes", () => {
     expect(Math.abs(after - (before + delta))).toBeLessThan(0.0021);
     await expect(page.getByTestId("member-card")).toHaveCount(4);
     await expect(page.locator('[data-kind="candidate"]').getByTestId("member-name").filter({ hasText: replacedName })).toHaveCount(0);
+
+    // E2. The unsent recommendation survives normal navigation (same tab), and preferences can be revisited.
+    const kept = await page.locator('[data-kind="candidate"]').getByTestId("member-name").allInnerTexts();
+    await page.goto(`/s/${slug}/discover`);
+    await page.goBack();
+    await expect(page.getByTestId("proposal")).toBeVisible();
+    expect(await page.locator('[data-kind="candidate"]').getByTestId("member-name").allInnerTexts()).toEqual(kept);
+    await expect(page.getByTestId("replace-summary")).toContainText(`Replaced ${replacedName} with`);
+    await page.getByRole("button", { name: "Edit preferences" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Build your ideal team" })).toBeFocused();
+    await expect(page.getByTestId("send-invites")).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to recommended team" }).click();
+    await expect(page.getByTestId("proposal")).toBeVisible();
+    // Alternatives: "Try another team" moves through the engine's distinct proposals.
+    if (await page.getByTestId("try-another").isVisible()) {
+      await page.getByTestId("try-another").click();
+      await expect(page.getByTestId("option-label")).toContainText("alternative 1");
+      await expect(page.getByTestId("replace-summary")).toHaveCount(0);
+    }
+    // Deselecting a candidate changes what would be sent; nothing is sent here.
+    const inviteBar = page.getByTestId("send-invites");
+    await inviteBar.getByRole("checkbox").first().uncheck();
+    await expect(inviteBar.getByRole("button", { name: "Send 2 invitations" })).toBeEnabled();
+    await expect(inviteBar.getByRole("heading")).toHaveText("Ready to invite 2 teammates");
 
     // M. Nothing was created: Jordan still has no team and no invitations.
     await page.goto(`/s/${slug}/teams`);
@@ -460,7 +494,8 @@ test.describe("Public demo sandboxes", () => {
 
     // A + B. Jordan (no team yet) asks Smart Team Formation: Maya, Priya and Alex are recommended.
     await page.goto(`/s/${slug}/smart`);
-    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    if (await page.getByTestId("proposal").isVisible()) await page.getByRole("button", { name: "Edit preferences" }).click();
+    await page.getByRole("button", { name: "Generate team" }).click();
     await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
     const names = page.locator('[data-kind="candidate"]').getByTestId("member-name");
     await expect(names).toHaveCount(3);
@@ -674,7 +709,8 @@ test.describe("Public demo sandboxes", () => {
 
     // A. Jordan invites the recommended Maya and Priya (keeps Alex as a draft candidate only).
     await page.goto(`/s/${slug}/smart`);
-    await page.getByRole("button", { name: "Generate recommended team" }).click();
+    if (await page.getByTestId("proposal").isVisible()) await page.getByRole("button", { name: "Edit preferences" }).click();
+    await page.getByRole("button", { name: "Generate team" }).click();
     await expect(page.getByTestId("proposal")).toBeVisible({ timeout: 20_000 });
     const bar = page.getByTestId("send-invites");
     await bar.getByRole("checkbox", { name: "Alex Morgan" }).uncheck();

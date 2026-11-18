@@ -21,9 +21,9 @@ goals, interests, overlapping availability and working style, and explains each 
 ## What you can do in the demo
 
 1. **Try Interactive Demo** gives you a private sandbox of about 44 synthetic students. You start as *Jordan Lee*.
-2. Open **AI@USC Hackathon 2026** → **Smart Team Formation** → *Generate recommended team*.
-   It compares every possible team (1,160 in this Space) and explains the best one.
-3. Expand **Compare with simple individual ranking**. In this synthetic Space, whole-team optimization
+2. Open **AI@USC Hackathon 2026** → **Smart Team Formation**, set preferences, then *Generate team*.
+   It compares every possible team (1,160 in this Space) and explains the best one in plain language.
+3. Open **See detailed analysis** for the scores, weights and the comparison with simple individual ranking. In this synthetic Space, whole-team optimization
    finds a team with 20 shared hours a week; picking the top individuals gives 4. Both cover all roles.
    This is an illustrative example, not a measured result.
 4. **Replace** a candidate (the score is recomputed instantly), then **Send invitations**.

@@ -1,54 +1,110 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Info, Loader2, Repeat2, Send, Sparkles, UserX, X } from "lucide-react";
+import {
+  AlertTriangle, ArrowLeft, CalendarDays, Check, Loader2, RefreshCw, Send, SlidersHorizontal, Sparkles, Target, Trophy, UsersRound, X, Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { ChipSelect } from "@/components/forms/chip-select";
-import { FieldGroup, inputClass } from "@/components/forms/field";
-import { Segmented } from "@/components/forms/segmented";
+import { inputClass } from "@/components/forms/field";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import type { FormResponse, ReplaceResponse } from "@/lib/matching/service";
 import type { TeamView } from "@/lib/matching/view";
-import { ROLES } from "@/lib/taxonomy";
-import { DeltaChip, DimensionBars, FitHeadline, Gaps, RoleCoverage, ScheduleSummary, SkillChips } from "./fit";
-import { MemberCard } from "./member-card";
-
-const TARGET_ROLES = ROLES.filter((r) => r.id !== "flexible");
+import { matchLabel, teamSummary, whyThisTeam, type Tone, type WhyCard } from "@/lib/matching/why";
+import { cn } from "@/lib/utils";
+import { DeltaChip } from "./fit";
+import { DetailedAnalysis, type Change } from "./detailed-analysis";
+import { FormationSettings, type Prefs } from "./formation-settings";
+import { StepIndicator } from "./step-indicator";
+import { TeamMemberCard } from "./team-member-card";
 
 type Preset = { key: string; label: string };
-type Change = { removed: string; added: string; delta: number; partDeltas: Record<string, number>; previous: number };
+type View = "settings" | "review";
+type Saved = {
+  v: 1;
+  at: number;
+  view: View;
+  prefs: Prefs;
+  excluded: { id: string; name: string }[];
+  result: FormResponse | null;
+  option: number;
+  current: TeamView | null;
+  change: Change | null;
+  deselected: string[];
+};
+
+/** A generated (never sent) recommendation survives normal navigation for this long, in this tab only. */
+const KEEP_MS = 30 * 60_000;
+
+const BAND_PILL: Record<TeamView["band"], { className: string; icon: LucideIcon }> = {
+  Strong: { className: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-900", icon: Trophy },
+  Good: { className: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-900", icon: Check },
+  Fair: { className: "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900", icon: AlertTriangle },
+  Weak: { className: "bg-muted text-muted-foreground ring-border", icon: AlertTriangle },
+};
+
+const noSubscribe = () => () => {};
+
+function readStored(key: string): string {
+  try {
+    return window.sessionStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function parseSaved(raw: string): Saved | null {
+  if (!raw) return null;
+  try {
+    const s = JSON.parse(raw) as Saved;
+    return s && s.v === 1 && Date.now() - s.at < KEEP_MS ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+const WHY_ICON: Record<WhyCard["key"], LucideIcon> = { skills: Zap, goals: Target, schedule: CalendarDays };
+const TONE_TEXT: Record<Tone, string> = { good: "Strength", mixed: "Partly", weak: "Weak spot" };
 
 export function SmartFormation({
   spaceId,
   slug,
+  spaceTitle,
+  viewerId,
   minSize,
   maxSize,
   presets,
   defaultPreset,
   team,
+  eligibility,
 }: {
   spaceId: string;
   slug: string;
+  spaceTitle: string;
+  viewerId: string;
   minSize: number;
   maxSize: number;
   presets: Preset[];
   defaultPreset: string;
   team: { id: string; name: string; members: number; targetSize: number } | null;
+  /** Server-rendered "who can be matched" panel, shown (collapsed) with the preferences. */
+  eligibility?: React.ReactNode;
 }) {
-  const sizes = Array.from({ length: maxSize - Math.max(minSize, 2) + 1 }, (_, i) => Math.max(minSize, 2) + i);
-  const [teamSize, setTeamSize] = useState(Math.min(4, maxSize));
-  const [preset, setPreset] = useState(defaultPreset);
-  const [mustRoles, setMustRoles] = useState<string[]>([]);
-  const [minHours, setMinHours] = useState("");
-  const [strict, setStrict] = useState(false);
+  const sizes = Array.from({ length: Math.max(maxSize - Math.max(minSize, 2) + 1, 1) }, (_, i) => Math.max(minSize, 2) + i);
+  const [prefs, setPrefs] = useState<Prefs>({
+    teamSize: Math.min(Math.max(4, sizes[0]), sizes[sizes.length - 1]),
+    preset: defaultPreset,
+    mustRoles: [],
+    minHours: "",
+    strict: false,
+  });
   const [excluded, setExcluded] = useState<{ id: string; name: string }[]>([]);
+  const [view, setView] = useState<View>("settings");
 
   const [result, setResult] = useState<FormResponse | null>(null);
   const [option, setOption] = useState(0);
@@ -57,6 +113,7 @@ export function SmartFormation({
   const [loading, setLoading] = useState(false);
   const [replace, setReplace] = useState<ReplaceResponse | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const router = useRouter();
   // Invitations are only ever sent from this explicit selection + confirmation.
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
@@ -65,13 +122,60 @@ export function SmartFormation({
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const focusNext = useRef(false);
+  const sent = useRef(false);
+  const storageKey = `tm:smart:v1:${spaceId}:${viewerId}:${team?.id ?? "new"}`;
+
+  // Restore this tab's unsent recommendation (and preferences) after navigating away and back.
+  // The server render has nothing stored (undefined); the client reads sessionStorage once per key.
+  const stored = useSyncExternalStore(noSubscribe, () => readStored(storageKey), () => undefined);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  if (stored !== undefined && hydratedKey !== storageKey) {
+    setHydratedKey(storageKey);
+    const s = parseSaved(stored);
+    if (s) {
+      setPrefs(s.prefs);
+      setExcluded(s.excluded);
+      setResult(s.result);
+      setOption(s.option);
+      setCurrent(s.current);
+      setChange(s.change);
+      setDeselected(new Set(s.deselected));
+      setView(s.result ? s.view : "settings");
+    }
+  }
+
+  useEffect(() => {
+    if (hydratedKey !== storageKey || sent.current) return;
+    try {
+      const s: Saved = { v: 1, at: Date.now(), view, prefs, excluded, result, option, current, change, deselected: [...deselected] };
+      window.sessionStorage.setItem(storageKey, JSON.stringify(s));
+    } catch {
+      /* storage unavailable: nothing is kept */
+    }
+  }, [hydratedKey, storageKey, view, prefs, excluded, result, option, current, change, deselected]);
+
+  // Moving between steps: start at the top and put focus on the new step's heading.
+  useEffect(() => {
+    if (!focusNext.current) return;
+    focusNext.current = false;
+    window.scrollTo({ top: 0 });
+    headingRef.current?.focus({ preventScroll: true });
+  }, [view, result]);
+
+  function go(next: View) {
+    focusNext.current = true;
+    setView(next);
+  }
+
   const params = (exclude = excluded) => ({
     team_id: team?.id ?? null,
-    team_size: teamSize,
-    preset,
-    must_roles: team ? [] : mustRoles,
-    min_shared_hours: team || minHours === "" ? null : Number(minHours),
-    strict,
+    team_size: prefs.teamSize,
+    preset: prefs.preset,
+    must_roles: team ? [] : prefs.mustRoles,
+    min_shared_hours: team || prefs.minHours === "" ? null : Number(prefs.minHours),
+    strict: prefs.strict,
     exclude_ids: exclude.map((e) => e.id),
   });
 
@@ -84,11 +188,20 @@ export function SmartFormation({
       setCurrent(res.proposals[0] ?? null);
       setChange(null);
       setDeselected(new Set());
+      if (view !== "review") go("review");
     } catch (err) {
       toast.error((err as ApiClientError).message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function pickOption(i: number) {
+    if (!result?.proposals[i]) return;
+    setOption(i);
+    setCurrent(result.proposals[i]);
+    setChange(null);
+    setDeselected(new Set());
   }
 
   async function openReplace(memberId: string) {
@@ -120,6 +233,12 @@ export function SmartFormation({
     void generate(next);
   }
 
+  function allow(id: string) {
+    const next = excluded.filter((x) => x.id !== id);
+    setExcluded(next);
+    if (result && view === "review") void generate(next);
+  }
+
   const candidates = current?.members.filter((m) => m.kind === "candidate") ?? [];
   const selected = candidates.filter((c) => !deselected.has(c.id));
 
@@ -138,12 +257,18 @@ export function SmartFormation({
               team: {
                 name: teamName,
                 description: "",
-                open_positions: teamSize - 1,
+                open_positions: prefs.teamSize - 1,
                 recruiting: true,
-                requirements: { must_roles: mustRoles, min_shared_hours: minHours === "" ? null : Number(minHours) },
+                requirements: { must_roles: prefs.mustRoles, min_shared_hours: prefs.minHours === "" ? null : Number(prefs.minHours) },
               },
             },
           });
+      try {
+        window.sessionStorage.removeItem(storageKey); // sent: never show this draft again
+      } catch {
+        /* ignore */
+      }
+      sent.current = true;
       toast.success(`${ids.length} invitation${ids.length === 1 ? "" : "s"} sent. Each person decides whether to join.`);
       setSendOpen(false);
       router.push(`/s/${slug}/teams/${res.team_id}`);
@@ -160,258 +285,242 @@ export function SmartFormation({
     }
   }
 
+  const reviewing = view === "review" && result !== null;
+  const step: 1 | 2 | 3 = !reviewing ? 1 : sendOpen ? 3 : 2;
+  const openPositions = team ? Math.max(team.targetSize - team.members, 0) : prefs.teamSize - 1;
+
   return (
-    <div className="flex flex-col gap-6">
-      <section className="rounded-xl border bg-card p-4 sm:p-6" aria-labelledby="controls-heading">
-        <h2 id="controls-heading" className="flex items-center gap-2 text-lg font-semibold">
-          <Sparkles className="size-4 text-primary" aria-hidden /> {team ? `Complete “${team.name}”` : "Build my ideal team"}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {team
-            ? `Your ${team.members} accepted member${team.members === 1 ? "" : "s"} stay fixed. The team's own requirements are used to fill ${Math.max(team.targetSize - team.members, 0)} open position${team.targetSize - team.members === 1 ? "" : "s"}.`
-            : "Proposes a complete team around you, optimized as a whole: roles and skills, goals, interests, shared hours and working style."}
-        </p>
+    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 sm:gap-7">
+      <StepIndicator current={step} onSelect={(s) => s === 1 && go("settings")} />
+      <p role="status" aria-live="polite" className="sr-only">{loading ? "Generating a recommended team…" : ""}</p>
 
-        <div className="mt-5 flex flex-col gap-5">
-          {!team && (
-            <div className="grid gap-5 sm:grid-cols-[10rem_1fr]">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="team-size" className="text-sm font-medium">Team size</label>
-                <select id="team-size" className={inputClass} value={teamSize} onChange={(e) => setTeamSize(Number(e.target.value))}>
-                  {sizes.map((n) => (
-                    <option key={n} value={n}>{n} people</option>
-                  ))}
-                </select>
-              </div>
-              <FieldGroup label="Roles this team must have" hint="Leave empty to use a typical role mix.">
-                <ChipSelect options={TARGET_ROLES} value={mustRoles} onChange={setMustRoles} max={5} size="sm" />
-              </FieldGroup>
-            </div>
-          )}
-          <FieldGroup label="What matters most" required>
-            <Segmented name="preset" options={presets.map((p) => ({ id: p.key, label: p.label }))} value={preset} onChange={(p) => setPreset(p ?? defaultPreset)} ariaLabel="Priority" />
-          </FieldGroup>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {!team && (
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="min-hours" className="text-sm font-medium">
-                  Minimum shared hours/week <span className="font-normal text-muted-foreground">(optional)</span>
-                </label>
-                <input id="min-hours" type="number" min={0} max={40} inputMode="numeric" className={inputClass} value={minHours} onChange={(e) => setMinHours(e.target.value)} placeholder="e.g. 6" />
-              </div>
-            )}
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background p-3">
-              <div>
-                <label htmlFor="strict" className="text-sm font-medium">Strict requirements</label>
-                <p id="strict-desc" className="mt-0.5 text-xs text-muted-foreground">
-                  Only propose teams that cover every required role and the minimum shared hours. May return no team.
-                </p>
-              </div>
-              <Switch id="strict" checked={strict} onCheckedChange={setStrict} aria-describedby="strict-desc" />
-            </div>
-          </div>
-          {excluded.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-muted-foreground">Not suggesting:</span>
-              {excluded.map((e) => (
-                <span key={e.id} className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs">
-                  {e.name}
-                  <button
-                    type="button"
-                    aria-label={`Allow ${e.name} again`}
-                    className="rounded-full p-0.5 hover:bg-muted"
-                    onClick={() => {
-                      const next = excluded.filter((x) => x.id !== e.id);
-                      setExcluded(next);
-                      if (result) void generate(next);
-                    }}
-                  >
-                    <X className="size-3" aria-hidden />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          <div>
-            <Button size="lg" onClick={() => generate()} disabled={loading}>
-              {loading ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Sparkles data-icon="inline-start" aria-hidden />}
-              {result ? "Regenerate team" : "Generate recommended team"}
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {result && result.message && (
-        <section role="status" data-testid="match-message" className="rounded-xl border border-brand-gold/60 bg-brand-gold/10 p-4 sm:p-5">
-          <h2 className="font-medium">{result.proposals.length === 0 ? "No matches yet" : "Heads up"}</h2>
-          <p className="mt-1 text-sm">{result.message}</p>
-          {result.suggestions.length > 0 && (
-            <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
-              {result.suggestions.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {result && current && (
-        <section aria-labelledby="proposal-heading" className="flex flex-col gap-5" data-testid="proposal">
-          <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="proposal-heading" className="text-lg font-semibold">Recommended team</h2>
-              <Badge variant="outline" className="border-dashed font-normal" data-testid="draft-status">
-                Draft proposal · nobody has been invited
-              </Badge>
-            </div>
-            <FitHeadline team={current} previous={change?.previous} />
-            {change && (
-              <p role="status" data-testid="replace-summary" className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm">
-                Replaced <strong>{change.removed}</strong> with <strong>{change.added}</strong>: team fit {change.previous.toFixed(3)} → {current.score.toFixed(3)}
-                <DeltaChip value={change.delta} digits={3} />
-              </p>
-            )}
-            {result.proposals.length > 1 && (
-              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Team options">
-                {result.proposals.map((p, i) => (
-                  <button
-                    key={p.key}
-                    role="tab"
-                    type="button"
-                    aria-selected={option === i && !change}
-                    onClick={() => {
-                      setOption(i);
-                      setCurrent(p);
-                      setChange(null);
-                    }}
-                    className={`rounded-full border px-3 py-1 text-sm ${option === i && !change ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted"}`}
-                  >
-                    {i === 0 ? "Best match" : `Alternative ${i}`} · {p.score.toFixed(2)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="flex gap-2 text-xs text-muted-foreground">
-              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Scores are calculated from profiles ({result.search.evaluations.toLocaleString()} possible teams compared, {result.preset_label.toLowerCase()} weighting). They are relative, not a prediction of success. Everyone except you
-              {team ? " and your accepted members" : ""} is only a candidate until they accept an invitation.
+      {!reviewing ? (
+        <section aria-labelledby="formation-heading" className="flex flex-col gap-6">
+          <header>
+            <p className="text-sm text-muted-foreground">Smart Team Formation · {spaceTitle}</p>
+            <h1 id="formation-heading" ref={headingRef} tabIndex={-1} className="mt-1 text-3xl font-bold tracking-tight outline-none sm:text-4xl">
+              {team ? `Complete “${team.name}”` : "Build your ideal team"}
+            </h1>
+            <p className="mt-2 text-base text-muted-foreground">
+              {team
+                ? `Your ${team.members} accepted member${team.members === 1 ? "" : "s"} stay on the team. TrojanMatch fills ${openPositions} open position${openPositions === 1 ? "" : "s"} using the team's own requirements.`
+                : "Create a balanced team based on roles, goals, and availability."}
             </p>
-          </div>
+          </header>
 
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {current.members.map((m) => (
-              <li key={m.id}>
-                <MemberCard
-                  member={m}
-                  highlight={!!change && m.name === change.added}
-                  actions={
-                    m.kind === "candidate" ? (
-                      <>
-                        <Button variant="outline" size="sm" onClick={() => openReplace(m.id)} disabled={replacingId !== null} aria-label={`Replace ${m.name}`}>
-                          {replacingId === m.id ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Repeat2 data-icon="inline-start" aria-hidden />}
-                          Replace
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => exclude({ id: m.id, name: m.name })} disabled={loading} aria-label={`Don't suggest ${m.name}`}>
-                          <UserX data-icon="inline-start" aria-hidden /> Don&apos;t suggest
-                        </Button>
-                      </>
-                    ) : undefined
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="why-heading">
-              <h3 id="why-heading" className="mb-3 font-medium">Why this team?</h3>
-              <DimensionBars dimensions={current.dimensions} deltas={change?.partDeltas} />
-            </section>
-            <div className="flex flex-col gap-5">
-              <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="roles-heading">
-                <h3 id="roles-heading" className="mb-3 font-medium">Role &amp; skill coverage</h3>
-                <RoleCoverage roles={current.roles} usingDefault={current.usingDefaultRoles} />
-                <div className="mt-4">
-                  <SkillChips covered={current.skillsCovered} missing={current.skillsMissing} areas={current.skillAreas} />
-                </div>
-              </section>
-              <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="avail-heading">
-                <h3 id="avail-heading" className="mb-3 font-medium">Availability overlap</h3>
-                <ScheduleSummary schedule={current.schedule} />
-              </section>
-              <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="gaps-heading">
-                <h3 id="gaps-heading" className="mb-3 font-medium">Weaknesses &amp; gaps</h3>
-                <Gaps gaps={current.gaps} />
-              </section>
+          {result && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
+              <span>Your recommended team is still here. Change preferences and generate again, or go back to it.</span>
+              <Button variant="outline" size="sm" onClick={() => go("review")}>
+                <ArrowLeft data-icon="inline-start" aria-hidden /> Back to recommended team
+              </Button>
             </div>
-          </div>
-
-          {result.baseline && result.comparison && (
-            <details className="rounded-xl border bg-card p-4 sm:p-5" data-testid="baseline">
-              <summary className="cursor-pointer font-medium">Compare with simple individual ranking</summary>
-              <p className="mt-2 text-sm text-muted-foreground">
-                A simple recommender picks the {candidates.length} people who each look best next to {team ? "your current members" : "you"}. TrojanMatch scores every complete team instead.
-              </p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[320px] text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-muted-foreground">
-                      <th scope="col" className="py-1 pr-3 font-normal">Method</th>
-                      <th scope="col" className="py-1 pr-3 font-normal">Team fit</th>
-                      <th scope="col" className="py-1 pr-3 font-normal">Role coverage</th>
-                      <th scope="col" className="py-1 font-normal">Shared h/week</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-t">
-                      <th scope="row" className="py-1.5 pr-3 text-left font-medium">Whole-team optimization</th>
-                      <td className="py-1.5 pr-3 font-mono">{result.comparison.score.toFixed(3)}</td>
-                      <td className="py-1.5 pr-3 font-mono">{Math.round(result.comparison.roleCoverage * 100)}%</td>
-                      <td className="py-1.5 font-mono">{result.comparison.sharedHours}</td>
-                    </tr>
-                    <tr className="border-t">
-                      <th scope="row" className="py-1.5 pr-3 text-left font-normal">Top individuals</th>
-                      <td className="py-1.5 pr-3 font-mono">{result.baseline.score.toFixed(3)}</td>
-                      <td className="py-1.5 pr-3 font-mono">{Math.round(result.baseline.roleCoverage * 100)}%</td>
-                      <td className="py-1.5 font-mono">{result.baseline.sharedHours}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Top individuals would be: {result.baseline.team.members.map((m) => m.name).join(", ")}.
-              </p>
-            </details>
           )}
 
-          <section aria-labelledby="send-heading" data-testid="send-invites" data-toast-avoid className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-primary/40 bg-card p-4 shadow-md sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h3 id="send-heading" className="font-medium">Invite this team</h3>
-              <fieldset className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                <legend className="sr-only">Who to invite</legend>
-                {candidates.map((c) => (
-                  <label key={c.id} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[var(--primary)]"
-                      checked={!deselected.has(c.id)}
-                      onChange={(e) => {
-                        const next = new Set(deselected);
-                        if (e.target.checked) next.delete(c.id);
-                        else next.add(c.id);
-                        setDeselected(next);
-                      }}
-                    />
-                    {c.name}
-                  </label>
-                ))}
-              </fieldset>
-              <p className="mt-1 text-xs text-muted-foreground">Nothing is sent until you confirm. Invitations expire after 48 hours.</p>
+          <div className="rounded-2xl border bg-card p-5 shadow-xs sm:px-7 sm:py-6">
+            <FormationSettings prefs={prefs} onChange={setPrefs} sizes={sizes} presets={presets} existingTeam={!!team} />
+
+            {excluded.length > 0 && (
+              <ExcludedList excluded={excluded} onAllow={allow} className="mt-5" />
+            )}
+
+            <div className="mt-5 flex justify-center">
+              <Button size="lg" onClick={() => generate()} disabled={loading} className="h-12 w-full max-w-sm text-base" data-testid="generate-team">
+                {loading ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Sparkles data-icon="inline-start" aria-hidden />}
+                {loading ? "Generating…" : "Generate team"}
+              </Button>
             </div>
-            <Button size="lg" onClick={() => setSendOpen(true)} disabled={selected.length === 0}>
-              <Send data-icon="inline-start" aria-hidden /> Send {selected.length} invitation{selected.length === 1 ? "" : "s"}
-            </Button>
-          </section>
+          </div>
+
+          {eligibility}
+        </section>
+      ) : (
+        <section aria-labelledby="formation-heading" className="flex flex-col gap-6" data-testid="proposal">
+          <header className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">Smart Team Formation · {spaceTitle}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 id="formation-heading" ref={headingRef} tabIndex={-1} className="text-3xl font-bold tracking-tight outline-none">
+                {current ? "Recommended team" : "No team to recommend yet"}
+              </h1>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => go("settings")}>
+                  <SlidersHorizontal data-icon="inline-start" aria-hidden /> Edit preferences
+                </Button>
+                {result.proposals.length > 1 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => pickOption((option + 1) % result.proposals.length)}
+                    disabled={loading}
+                    data-testid="try-another"
+                  >
+                    <RefreshCw data-icon="inline-start" aria-hidden /> Try another team
+                  </Button>
+                )}
+              </div>
+            </div>
+            {current && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <MatchPill band={current.band} />
+                <p className="text-sm text-muted-foreground" data-testid="team-summary">{teamSummary(current)}</p>
+              </div>
+            )}
+            {current && result.proposals.length > 1 && (
+              <p className="text-xs text-muted-foreground" data-testid="option-label">
+                {change ? "Your edited version of " : "Showing "}
+                {option === 0 ? "the best match" : `alternative ${option}`} · option {option + 1} of {result.proposals.length}
+              </p>
+            )}
+            {change && current && (
+              <p role="status" data-testid="replace-summary" className="flex flex-wrap items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+                Replaced <strong>{change.removed}</strong> with <strong>{change.added}</strong>.
+                <span className="text-muted-foreground">
+                  Overall fit {Math.abs(change.delta) < 0.0005 ? "is unchanged" : change.delta > 0 ? "improved" : "went down"}
+                </span>
+                <span className="sr-only">(see detailed analysis for scores)</span>
+              </p>
+            )}
+          </header>
+
+          {result.message && (
+            <section role="status" data-testid="match-message" className="rounded-xl border border-brand-gold/60 bg-brand-gold/10 p-4 sm:p-5">
+              <h2 className="font-medium">{result.proposals.length === 0 ? "No matches yet" : "Heads up"}</h2>
+              <p className="mt-1 text-sm">{result.message}</p>
+              {result.suggestions.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
+                  {result.suggestions.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
+              )}
+              {result.proposals.length === 0 && (
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => go("settings")}>
+                  <SlidersHorizontal data-icon="inline-start" aria-hidden /> Adjust preferences
+                </Button>
+              )}
+            </section>
+          )}
+
+          {current && (
+            <>
+              <ul className={cn("grid gap-3 sm:grid-cols-2 sm:items-start", loading && "opacity-60")} aria-label="Team members" aria-busy={loading}>
+                {current.members.map((m) => (
+                  <li key={m.id}>
+                    <TeamMemberCard
+                      member={m}
+                      highlight={!!change && m.name === change.added}
+                      onReplace={() => openReplace(m.id)}
+                      replacing={replacingId === m.id}
+                      replaceDisabled={replacingId !== null || loading}
+                      onExclude={() => exclude({ id: m.id, name: m.name })}
+                      excludeDisabled={loading}
+                    />
+                  </li>
+                ))}
+              </ul>
+              {(excluded.length > 0 || current.members.some((m) => m.synthetic)) && (
+                <div className="-mt-3 flex flex-col gap-2">
+                  {excluded.length > 0 && <ExcludedList excluded={excluded} onAllow={allow} />}
+                  {current.members.some((m) => m.synthetic) && (
+                    <p className="text-xs text-muted-foreground">Profiles marked synthetic are demo data, not real students.</p>
+                  )}
+                </div>
+              )}
+
+              <section aria-labelledby="why-heading" className="flex flex-col gap-3">
+                <h2 id="why-heading" className="text-xl font-bold tracking-tight">Why this team?</h2>
+                <ul className="grid gap-3 md:grid-cols-3">
+                  {whyThisTeam(current).map((c) => {
+                    const Icon = c.tone === "weak" ? AlertTriangle : WHY_ICON[c.key];
+                    return (
+                      <li key={c.key} className="rounded-xl border bg-card p-4" data-testid={`why-${c.key}`} data-tone={c.tone}>
+                        <h3 className="flex items-center gap-2 font-semibold">
+                          <Icon className={cn("size-5 shrink-0", c.tone === "weak" ? "text-amber-600 dark:text-amber-400" : "text-primary")} aria-hidden />
+                          {c.title}
+                          <span className="sr-only"> ({TONE_TEXT[c.tone]})</span>
+                        </h3>
+                        <p className="mt-2 text-sm text-muted-foreground">{c.body}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+
+              <DetailedAnalysis
+                result={result}
+                current={current}
+                option={option}
+                change={change}
+                existingTeam={!!team}
+                candidateCount={candidates.length}
+                onPickOption={pickOption}
+                open={analysisOpen}
+                onOpenChange={setAnalysisOpen}
+              />
+
+              {candidates.length > 0 && (
+                <section
+                  aria-labelledby="send-heading"
+                  data-testid="send-invites"
+                  data-toast-avoid
+                  data-sticky-invite
+                  className="z-10 flex flex-col gap-4 rounded-2xl border border-primary/40 bg-card p-4 shadow-lg shadow-primary/5 sm:flex-row sm:items-center sm:justify-between sm:p-5 lg:sticky lg:bottom-3"
+                >
+                  <div className="flex min-w-0 gap-3">
+                    <UsersRound className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden />
+                    <div className="min-w-0">
+                      <h2 id="send-heading" className="font-semibold">
+                        {selected.length === 0 ? (
+                          "Select who to invite"
+                        ) : (
+                          <>
+                            Ready to invite <span className="text-primary">{selected.length}</span> {team ? "more " : ""}teammate{selected.length === 1 ? "" : "s"}
+                          </>
+                        )}
+                      </h2>
+                      <fieldset className="mt-2 flex flex-wrap gap-1.5">
+                        <legend className="sr-only">Who to invite</legend>
+                        {candidates.map((c) => {
+                          const on = !deselected.has(c.id);
+                          return (
+                            <label
+                              key={c.id}
+                              className={cn(
+                                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring",
+                                on ? "border-primary/30 bg-primary/5" : "text-muted-foreground line-through decoration-muted-foreground/50",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="size-4 accent-[var(--primary)]"
+                                checked={on}
+                                onChange={(e) => {
+                                  const next = new Set(deselected);
+                                  if (e.target.checked) next.delete(c.id);
+                                  else next.add(c.id);
+                                  setDeselected(next);
+                                }}
+                              />
+                              {c.name}
+                            </label>
+                          );
+                        })}
+                      </fieldset>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                    <Button size="lg" onClick={() => setSendOpen(true)} disabled={selected.length === 0} className="h-11">
+                      <Send data-icon="inline-start" aria-hidden /> Send {selected.length} invitation{selected.length === 1 ? "" : "s"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground sm:text-right">
+                      <span data-testid="draft-status">Draft proposal · nobody has been invited</span>
+                      <br />
+                      Nothing is sent until you confirm. Invitations expire after 48 hours.
+                    </p>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
         </section>
       )}
 
@@ -421,8 +530,8 @@ export function SmartFormation({
             <DialogTitle>Send {selected.length} invitation{selected.length === 1 ? "" : "s"}?</DialogTitle>
             <DialogDescription>
               {team
-                ? `They're invited to “${team.name}”. Each person joins only if they accept.`
-                : `This creates your team (you're the owner) and invites the people below. Each person joins only if they accept.`}
+                ? `They're invited to “${team.name}”. Each person joins only if they accept. Invitations expire after 48 hours.`
+                : `This creates your team (you're the owner) and invites the people below. Each person joins only if they accept. Invitations expire after 48 hours.`}
             </DialogDescription>
           </DialogHeader>
           <ul className="list-disc pl-5 text-sm" aria-label="Invitees">
@@ -434,7 +543,7 @@ export function SmartFormation({
             <div className="flex flex-col gap-1.5">
               <label htmlFor="new-team-name" className="text-sm font-medium">Team name</label>
               <input id="new-team-name" className={inputClass} value={teamName} maxLength={60} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Trojan Builders" />
-              <p className="text-xs text-muted-foreground">Team size {teamSize}: you + {teamSize - 1} open positions.</p>
+              <p className="text-xs text-muted-foreground">Team size {prefs.teamSize}: you + {prefs.teamSize - 1} open positions. The team is Forming until enough people accept.</p>
             </div>
           )}
           <div className="flex flex-col gap-1.5">
@@ -496,6 +605,32 @@ export function SmartFormation({
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function MatchPill({ band }: { band: TeamView["band"] }) {
+  const { className, icon: Icon } = BAND_PILL[band];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ring-1", className)} data-testid="match-label">
+      <Icon className="size-4" aria-hidden />
+      {matchLabel(band)}
+    </span>
+  );
+}
+
+function ExcludedList({ excluded, onAllow, className }: { excluded: { id: string; name: string }[]; onAllow: (id: string) => void; className?: string }) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5 text-sm", className)} data-testid="excluded">
+      <span className="text-muted-foreground">Not suggesting:</span>
+      {excluded.map((e) => (
+        <span key={e.id} className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs">
+          {e.name}
+          <button type="button" aria-label={`Allow ${e.name} again`} className="rounded-full p-0.5 hover:bg-muted" onClick={() => onAllow(e.id)}>
+            <X className="size-3" aria-hidden />
+          </button>
+        </span>
+      ))}
     </div>
   );
 }

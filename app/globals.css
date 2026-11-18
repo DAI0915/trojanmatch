@@ -139,3 +139,9 @@
     @apply font-sans;
   }
 }
+/* Smart Team Formation: the sticky invite bar (lg+) never hides a focused control. */
+@media (min-width: 64rem) {
+  html:has([data-sticky-invite]) {
+    scroll-padding-bottom: 10rem;
+  }
+}

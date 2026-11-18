@@ -15,7 +15,7 @@ const STEPS = [
   {
     icon: Sparkles,
     title: "Generate a Smart Team",
-    body: "Open AI@USC Hackathon 2026 → Smart Team Formation → Generate recommended team. Every possible team is scored deterministically; expand “Compare with simple individual ranking”.",
+    body: "Open AI@USC Hackathon 2026 → Smart Team Formation → Generate team. Every possible team is scored deterministically; open “See detailed analysis” to compare it with simple individual ranking.",
     href: "/spaces?type=hackathon&q=AI%40USC",
     cta: "Find the Space",
   },
