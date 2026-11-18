@@ -110,10 +110,14 @@ export function matchPresentation(t: TeamView): MatchPresentation {
   const label = matchLabel(t.band);
   if (t.band === "Fair") return { label, tone: "caution", tradeOff: null };
   if (t.band === "Weak") return { label, tone: "low", tradeOff: null };
-  const weak = whyThisTeam(t).filter((c) => c.tone === "weak");
+  const cards = whyThisTeam(t);
+  const weak = cards.filter((c) => c.tone === "weak");
   if (weak.length === 0) return { label, tone: "positive", tradeOff: null };
+  // Never credit a dimension whose explanation card isn't positive (e.g. a high skill score with a missing role).
+  const CARD_OF: Partial<Record<string, WhyCard["key"]>> = { skill: "skills", goal: "goals", schedule: "schedule" };
+  const notGood = new Set(cards.filter((c) => c.tone !== "good").map((c) => c.key));
   const helped = [...t.dimensions]
-    .filter((d) => d.score >= 0.75)
+    .filter((d) => d.score >= 0.75 && !(CARD_OF[d.key] && notGood.has(CARD_OF[d.key]!)))
     .sort((a, b) => b.score - a.score || b.weight - a.weight)
     .slice(0, 2)
     .map((d) => d.label.toLowerCase());

@@ -123,6 +123,17 @@ describe("matchPresentation", () => {
     expect(p.tradeOff).toBe("The overall score balances all five factors, but it has trade-offs to weigh before inviting: limited shared time.");
   });
 
+  it("does not credit a dimension whose card reports a weakness", () => {
+    const t = team({
+      band: "Good",
+      roles: [{ role: "AI / ML", level: "default", status: "missing", by: null }],
+      dimensions: dims({ skill: 0.9, style: 0.8 }),
+    });
+    const p = matchPresentation(t);
+    expect(p.tradeOff).toBe("The overall score is still good because this team does well on working style, but it has trade-offs to weigh before inviting: skill gaps.");
+    expect(p.tradeOff).not.toContain("skill:");
+  });
+
   it("leaves Fair and Weak labels as they are", () => {
     expect(matchPresentation(team({ band: "Fair" }))).toEqual({ label: "Fair match", tone: "caution", tradeOff: null });
     expect(matchPresentation(team({ band: "Weak" }))).toEqual({ label: "Weak match", tone: "low", tradeOff: null });
