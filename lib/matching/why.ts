@@ -19,30 +19,47 @@ export const matchLabel = (band: TeamView["band"]) => MATCH_LABEL[band];
 
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/**
+ * Roles and desired skills are separate requirements: a team can have every listed
+ * skill somewhere and still have nobody whose role is, say, AI / ML. The card keeps
+ * the two apart so the numbers never read as contradicting each other.
+ */
+function desiredSkills(t: TeamView, roleGap: string[]): string {
+  const total = t.skillsCovered.length + t.skillsMissing.length;
+  if (total === 0) return "";
+  const all = t.skillsMissing.length === 0;
+  if (all && roleGap.length) {
+    return ` Separately from roles, ${total === 1 ? "the 1 desired skill is" : `all ${total} desired skills are`} present on the team.`;
+  }
+  if (all) return ` ${total === 1 ? "The desired skill is" : `All ${total} desired skills are`} present on the team.`;
+  return ` Desired skills: ${t.skillsCovered.length} of ${total} present; missing ${list(t.skillsMissing)}.`;
+}
+
 function skillsCard(t: TeamView): WhyCard {
   const covered = t.roles.filter((r) => r.status === "covered").map((r) => r.role);
   const partial = t.roles.filter((r) => r.status === "partial").map((r) => r.role);
   const missing = t.roles.filter((r) => r.status === "missing").map((r) => r.role);
-  const skills =
-    t.skillsCovered.length + t.skillsMissing.length > 0
-      ? ` ${t.skillsCovered.length} of ${t.skillsCovered.length + t.skillsMissing.length} desired skills covered.`
-      : "";
   if (t.roles.length === 0) {
-    return { key: "skills", tone: "mixed", title: "Skills", body: `Skill areas: ${t.skillAreas.length ? list(t.skillAreas) : "none listed yet"}.${skills}` };
+    return { key: "skills", tone: "mixed", title: "Skills", body: `Skill areas: ${t.skillAreas.length ? list(t.skillAreas) : "none listed yet"}.${desiredSkills(t, [])}` };
   }
   if (missing.length === 0 && partial.length === 0) {
     return {
       key: "skills",
       tone: t.skillsMissing.length ? "mixed" : "good",
       title: "Balanced skills",
-      body: `Covers every target role: ${list(covered)}, each with a dedicated member.${skills}`,
+      body: `Covers every target role: ${list(covered)}, each with a dedicated member.${desiredSkills(t, [])}`,
     };
   }
   const parts: string[] = [];
-  if (covered.length) parts.push(`Covers ${list(covered)}.`);
+  if (covered.length) parts.push(`Roles filled: ${list(covered)}.`);
   if (partial.length) parts.push(`${list(partial)} only partly covered.`);
-  if (missing.length) parts.push(`No one covers ${list(missing)} yet.`);
-  return { key: "skills", tone: missing.length ? "weak" : "mixed", title: missing.length ? "Skill gaps" : "Mostly balanced skills", body: parts.join(" ") + skills };
+  if (missing.length) parts.push(`Open role${missing.length > 1 ? "s" : ""}: no one on the team covers ${list(missing)} yet.`);
+  return {
+    key: "skills",
+    tone: missing.length ? "weak" : "mixed",
+    title: missing.length ? (missing.length > 1 ? "Open roles" : "Open role") : "Mostly balanced skills",
+    body: parts.join(" ") + desiredSkills(t, missing),
+  };
 }
 
 function goalsCard(t: TeamView): WhyCard {

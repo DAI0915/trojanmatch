@@ -50,8 +50,9 @@ describe("whyThisTeam", () => {
       schedule: { sharedHours: 3, targetHours: 6, windows: [], timeZone: "UTC" },
     });
     const c = byKey(t);
-    expect(c.skills).toMatchObject({ tone: "weak", title: "Skill gaps" });
-    expect(c.skills.body).toContain("No one covers Design yet.");
+    expect(c.skills).toMatchObject({ tone: "weak", title: "Open role" });
+    expect(c.skills.body).toContain("Roles filled: Backend.");
+    expect(c.skills.body).toContain("no one on the team covers Design yet.");
     expect(c.goals.tone).toBe("weak");
     expect(c.goals.title).toBe("Different goals");
     expect(c.schedule).toMatchObject({ tone: "weak", title: "Limited shared time" });
@@ -70,6 +71,24 @@ describe("whyThisTeam", () => {
     expect(c.goals).toMatchObject({ tone: "mixed", title: "Mostly shared goals", body: "3 of 4 chose “Win”; 1 “Learn”." });
     expect(c.schedule).toMatchObject({ tone: "weak", title: "No common free time" });
     expect(teamSummary(t)).toBe("Covers every target role, but no common free time yet.");
+  });
+
+  it("keeps desired skills apart from an open role so the two never read as a contradiction", () => {
+    const roles: TeamView["roles"] = [
+      { role: "Frontend", level: "must", status: "covered", by: "You" },
+      { role: "AI / ML", level: "must", status: "missing", by: null },
+    ];
+    const c = byKey(team({ roles, skillsCovered: ["Python", "React", "SQL"], skillsMissing: [] }));
+    expect(c.skills).toMatchObject({ tone: "weak", title: "Open role" });
+    expect(c.skills.body).toBe(
+      "Roles filled: Frontend. Open role: no one on the team covers AI / ML yet. Separately from roles, all 3 desired skills are present on the team.",
+    );
+    expect(c.skills.body).not.toMatch(/3 of 3/);
+    const two = byKey(team({ roles: [...roles, { role: "Design", level: "must", status: "missing", by: null }] }));
+    expect(two.skills.title).toBe("Open roles");
+    expect(two.skills.body).toContain("covers AI / ML and Design yet.");
+    const someSkills = byKey(team({ roles, skillsCovered: ["Python"], skillsMissing: ["Figma"] }));
+    expect(someSkills.skills.body).toContain("Desired skills: 1 of 2 present; missing Figma.");
   });
 
   it("does not call skills balanced when desired skills are missing", () => {
@@ -112,7 +131,7 @@ describe("matchPresentation", () => {
     expect(p.label).toBe("Good match");
     expect(p.tone).toBe("neutral");
     expect(p.tradeOff).toBe(
-      "The overall score is still good because this team does well on working style and shared interests, but it has trade-offs to weigh before inviting: skill gaps, different goals and limited shared time.",
+      "The overall score is still good because this team does well on working style and shared interests, but it has trade-offs to weigh before inviting: open role, different goals and limited shared time.",
     );
   });
 
@@ -130,7 +149,7 @@ describe("matchPresentation", () => {
       dimensions: dims({ skill: 0.9, style: 0.8 }),
     });
     const p = matchPresentation(t);
-    expect(p.tradeOff).toBe("The overall score is still good because this team does well on working style, but it has trade-offs to weigh before inviting: skill gaps.");
+    expect(p.tradeOff).toBe("The overall score is still good because this team does well on working style, but it has trade-offs to weigh before inviting: open role.");
     expect(p.tradeOff).not.toContain("skill:");
   });
 

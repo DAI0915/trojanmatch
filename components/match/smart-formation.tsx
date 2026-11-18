@@ -111,6 +111,8 @@ export function SmartFormation({
   const [option, setOption] = useState(0);
   const [current, setCurrent] = useState<TeamView | null>(null);
   const [change, setChange] = useState<Change | null>(null);
+  // A switch the user asked for while a manual replacement is applied: confirmed first.
+  const [pendingOption, setPendingOption] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [replace, setReplace] = useState<ReplaceResponse | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
@@ -203,6 +205,12 @@ export function SmartFormation({
     setCurrent(result.proposals[i]);
     setChange(null);
     setDeselected(new Set());
+  }
+
+  /** Switching teams discards a manual replacement, so ask before doing that. */
+  function requestOption(i: number) {
+    if (change) setPendingOption(i);
+    else pickOption(i);
   }
 
   async function openReplace(memberId: string) {
@@ -350,7 +358,7 @@ export function SmartFormation({
                 {result.proposals.length > 1 && (
                   <Button
                     variant="outline"
-                    onClick={() => pickOption((option + 1) % result.proposals.length)}
+                    onClick={() => requestOption((option + 1) % result.proposals.length)}
                     disabled={loading}
                     data-testid="try-another"
                   >
@@ -521,7 +529,7 @@ export function SmartFormation({
                 change={change}
                 existingTeam={!!team}
                 candidateCount={candidates.length}
-                onPickOption={pickOption}
+                onPickOption={requestOption}
                 open={analysisOpen}
                 onOpenChange={setAnalysisOpen}
               />
@@ -564,6 +572,30 @@ export function SmartFormation({
             <Button onClick={sendInvites} disabled={sending || (!team && teamName.trim().length < 2)}>
               {sending ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : <Send data-icon="inline-start" aria-hidden />}
               Send invitations
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingOption !== null} onOpenChange={(o) => !o && setPendingOption(null)}>
+        <DialogContent data-testid="discard-replacement">
+          <DialogHeader>
+            <DialogTitle>Discard your replacement?</DialogTitle>
+            <DialogDescription>
+              {change
+                ? `You replaced ${change.removed} with ${change.added}. Showing ${pendingOption === 0 ? "the best match" : `alternative ${pendingOption}`} discards that change, and you'd need to redo it to get it back.`
+                : "Showing another team discards your change."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" autoFocus onClick={() => setPendingOption(null)}>Keep my edited team</Button>
+            <Button
+              onClick={() => {
+                if (pendingOption !== null) pickOption(pendingOption);
+                setPendingOption(null);
+              }}
+            >
+              Discard and switch
             </Button>
           </DialogFooter>
         </DialogContent>

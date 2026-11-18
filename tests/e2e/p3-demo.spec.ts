@@ -405,9 +405,23 @@ test.describe("Public demo sandboxes", () => {
     await expect(page.getByTestId("proposal")).toBeVisible();
     // Alternatives: "Try another team" moves through the engine's distinct proposals.
     if (await page.getByTestId("try-another").isVisible()) {
+      // A manual replacement is never dropped silently: switching asks first.
       await page.getByTestId("try-another").click();
+      const discard = page.getByTestId("discard-replacement");
+      await expect(discard).toBeVisible();
+      await expect(discard).toContainText(`You replaced ${replacedName} with`);
+      await discard.getByRole("button", { name: "Keep my edited team" }).click();
+      await expect(discard).toHaveCount(0);
+      await expect(page.getByTestId("replace-summary")).toContainText(`Replaced ${replacedName} with`);
+      await expect(page.getByTestId("option-label")).toContainText("Your edited version of the best match");
+      await page.getByTestId("try-another").click();
+      await page.getByTestId("discard-replacement").getByRole("button", { name: "Discard and switch" }).click();
       await expect(page.getByTestId("option-label")).toContainText("alternative 1");
       await expect(page.getByTestId("replace-summary")).toHaveCount(0);
+      // With nothing to lose, switching is immediate.
+      await page.getByTestId("try-another").click();
+      await expect(page.getByTestId("discard-replacement")).toHaveCount(0);
+      await expect(page.getByTestId("option-label")).not.toContainText("alternative 1");
     }
     // Deselecting a candidate changes what would be sent; nothing is sent here.
     const inviteBar = page.getByTestId("send-invites");

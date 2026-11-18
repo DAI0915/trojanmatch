@@ -101,7 +101,7 @@ function dimensionSummary(ctx: Context, e: Evaluation, key: PartKey): string {
       const skills = ctx.needs.skills.length
         ? `; ${e.skillsCovered.length} of ${ctx.needs.skills.length} desired skills covered`
         : `; skills span ${e.skillGroupsCovered.length} of 5 areas`;
-      return base + skills + (missing.length ? `. Missing: ${list(missing)}` : ".");
+      return base + skills + (missing.length ? `. Open role${missing.length > 1 ? "s" : ""}: ${list(missing)}` : ".");
     }
     case "goal": {
       if (n < 2) return "Needs at least two members to compare goals.";
