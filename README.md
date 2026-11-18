@@ -1,108 +1,266 @@
 # TrojanMatch
 
-**Stop searching. Start building.** Team formation for USC hackathons and course projects.
-*AI recommends. Humans decide.*
+**Whole-team matching for USC hackathons and course projects.** TrojanMatch recommends a complete,
+balanced team, explains why it fits, and takes the team from invitations to a shared workspace with
+real-time chat and a Gemini-generated kickoff plan.
 
-**[Try the interactive demo →](https://trojanmatch-jade.vercel.app)** (one click, no sign-up) ·
-**[3-minute video](https://youtu.be/u0y4W5DaLL0)**
+**[Live demo →](https://trojanmatch-jade.vercel.app)** (one click, no sign-up, private sandbox with synthetic students) ·
+**[3-minute video →](https://youtu.be/u0y4W5DaLL0)**
 
-Built solo for the AI@USC Hackathon 2026. Independent student project, not affiliated with or
-endorsed by USC.
+![Smart Team Formation: a recommended four-person team with a match label, a one-line explanation, member cards and the invitation bar](docs/images/smart-recommended-team.png)
 
-## Why
+I started TrojanMatch solo at the AI@USC Hackathon 2026 (Nov 14–15) and kept refining it afterwards.
+It's an independent student project, not affiliated with or endorsed by USC. All people in the demo are synthetic.
 
-Hackathon teams that form *before* the event can meet, discuss ideas and plan responsibilities
-before day one. Course-project teammates often differ in goals, schedules and commitment.
-Finding compatible teammates early is the hard part, and most tools rank individuals one at a time.
+## Why whole-team matching
 
-TrojanMatch recommends **whole teams**. It scores every candidate team on role and skill coverage,
-goals, interests, overlapping availability and working style, and explains each pick.
+Most teammate finders rank *individuals*: "these are the people who look best next to you." But a team
+of individually good matches can still be a bad team. Three backend developers with no shared free
+time is the classic failure.
 
-## What you can do in the demo
+TrojanMatch scores **complete candidate teams** on five factors: role and skill coverage, goal
+alignment, shared interests, availability overlap and working style. It keeps the best team, offers
+structurally different alternatives, and shows the comparison against individual ranking.
 
-1. **Try Interactive Demo** gives you a private sandbox of about 44 synthetic students. You start as *Jordan Lee*.
-2. Open **AI@USC Hackathon 2026** → **Smart Team Formation**, set preferences, then *Generate team*.
-   It compares every possible team (1,160 in this Space) and explains the best one in plain language.
-3. Open **See detailed analysis** for the scores, weights and the comparison with simple individual ranking. In this synthetic Space, whole-team optimization
-   finds a team with 20 shared hours a week; picking the top individuals gives 4. Both cover all roles.
-   This is an illustrative example, not a measured result.
-4. **Replace** a candidate (the score is recomputed instantly), then **Send invitations**.
-   Nothing is sent until you confirm.
-5. You play every student. Right after sending, a **Switch to <invitee>** prompt appears; accept as each
-   invitee. **Switch student** in the yellow demo bar lets you act as any of the 44 synthetic students
-   (invitees and teammates first, then a searchable list). The team turns **Active** when everyone has answered.
-6. Open the **team workspace** for real-time chat, then **AI Kickoff**. Gemini writes project ideas,
-   suggested roles and first steps from the team's consented profiles. It never changes scores.
+In the demo's *AI@USC Hackathon 2026* Space, as *Jordan Lee* with default settings, there are 20
+eligible candidates. The engine scores all 1,140 possible 4-person teams and finds one with
+**20 shared hours a week**. Picking the top individuals instead gives **4**. Both cover every role.
+This is one synthetic example shown in the app, not a measured result.
+
+![Detailed analysis: whole-team optimization (team fit 0.895, 20 shared h/week) vs. top individuals (0.871, 4 h/week)](docs/images/smart-whole-team-vs-individuals.png)
+
+## Features
+
+**Smart Team Formation, in three steps**
+1. **Set preferences.** Team size, up to 5 required roles, and what matters most (balanced skills,
+   similar goals, shared interests, schedule or course-project fit). Minimum shared hours and strict
+   requirements sit under *Advanced options*.
+2. **Review the team.** A match label (Strong, Good, Fair or Weak, derived from the score), a
+   one-sentence summary, member cards and three "Why this team?" cards for skills, goals and schedule.
+   When the score is good but a card flags a weakness, the label turns neutral and a note names the
+   trade-offs. *Try another team* cycles through alternatives. *Replace* swaps one member and
+   recomputes the whole team. If you've made a manual replacement, switching teams asks before
+   discarding it. *See detailed analysis* shows the scores, weights, role coverage, schedule overlap
+   and the comparison with individual ranking.
+3. **Send invitations.** Choose who to invite. Nothing is sent until you confirm, and invitations
+   expire after 48 hours.
+
+Smart Team Formation also completes an *existing* team: it keeps the current members and fills the open
+positions against the team's own role requirements.
+
+**Explainable matching.** Every explanation is derived from the engine's own output (`lib/matching/why.ts`).
+There are no hand-written claims and no LLM paraphrasing. Unit tests check that a positive label never
+contradicts a warning card, and that required roles and desired skills are reported separately.
+
+**Teams and invitations.** Find a Team (browse recruiting teams and request to join), Grow My Team
+(candidates ranked by how much they improve your team), explicit invitations, accept/decline,
+auto-activation once everyone has answered, and an owner-only *finalize*.
+
+**Workspace with real-time chat.** Accepted members get a team workspace. Messages arrive live through
+Supabase Realtime, and Row-Level Security decides who can read them.
+
+**Gemini-powered kickoff.** One click generates a structured plan for the team: shared goal, project
+ideas, strengths, gaps, suggested roles, a first-meeting agenda, first actions and risks.
+
+| Team workspace (real-time chat) | AI Kickoff (generated by Gemini) |
+|---|---|
+| ![Team workspace with live chat between two synthetic students](docs/images/workspace-chat.png) | ![AI Team Kickoff with project ideas, strengths and gaps, labeled "Generated by Gemini"](docs/images/ai-kickoff.png) |
+
+| Step 1: preferences | Mobile (375px) | Landing |
+|---|---|---|
+| ![Step 1: team size, required roles, what matters most, advanced options](docs/images/smart-preferences.png) | ![The recommended team on a 375px-wide screen](docs/images/mobile-recommended-team.png) | ![Landing page](docs/images/landing.png) |
+
+## How the matching works
+
+The engine (`lib/matching/engine.ts`) is pure TypeScript. It has no I/O and no randomness, so the same
+input always gives the same team.
+
+```
+Team Fit = Σ weightᵢ · componentᵢ          (each component in [0, 1])
+
+skill     0.7 · role coverage + 0.3 · skill score    (roles assigned one member each)
+goal      mean pairwise goal compatibility
+interest  mean pairwise overlap of interest tags
+schedule  min(1, hours/week when EVERYONE is free ÷ target hours)
+style     mean pairwise working-style compatibility
+```
+
+- **Weights come from the selected preset.** "Balanced skills" uses 0.30 / 0.25 / 0.20 / 0.15 / 0.10.
+  The weights are documented heuristics, not validated predictors of team success, and the app says so.
+- **Search:** build a shortlist (the top 24 candidates by individual gain, plus the best 3 per target
+  role). If the number of possible teams from that shortlist is ≤ 25,000, every one is scored.
+  Otherwise a width-64 beam search runs. Ties go to the higher score, then to sorted member IDs.
+- **Outputs:** the best team, up to two structurally different alternatives, and the
+  "top individuals" team for comparison.
+- **Hard constraints live in PostgreSQL, not in the engine.** `get_match_pool` returns only people in
+  the same Space and the same scope who have opted in to *all* of: visible to members, accepting
+  invites, Smart Match and looking for a team. The engine never sees anyone else.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+  B["Browser<br/>React 19 client components"] -->|"same-origin JSON /api/*"| N
+  B <-->|"Realtime websocket (RLS-checked)"| R
+  subgraph N["Next.js 16 on Vercel"]
+    P["proxy.ts<br/>session refresh, demo-lease check"]
+    H["Route Handlers<br/>auth + Origin check + Zod + rate limits"]
+    M["lib/matching<br/>deterministic engine"]
+    A["lib/ai<br/>Gemini client → template fallback"]
+    D["lib/demo<br/>service-role client (demo routes only)"]
+  end
+  subgraph S["Supabase"]
+    PG[("Postgres<br/>RLS on every table<br/>SECURITY DEFINER RPCs")]
+    AU["Auth"]
+    R["Realtime"]
+  end
+  H --> PG
+  H --> M
+  H --> A
+  D --> PG
+  A -->|"structured JSON"| G["Gemini API"]
+  H --> AU
 ```
-Browser ── Next.js 16 on Vercel (App Router, proxy.ts, Route Handlers)
-              ├─ lib/matching   deterministic TypeScript engine (exhaustive / beam search)
-              ├─ lib/ai         Gemini (server-side, JSON schema + Zod) → template fallback
-              └─ lib/demo       service-role client, used ONLY by /api/demo/* and scripts
-        ── Supabase: Postgres (RLS, SECURITY DEFINER RPCs), Auth, Realtime
-```
 
-- **Matching Spaces** are one hackathon edition or one course assignment. Search, matching,
-  invitations and chat never cross Spaces, and Postgres enforces this, not just the UI.
-- **Matching is deterministic**: a weighted whole-team score, exhaustive search when the number of
-  combinations is ≤ 25,000, otherwise a width-64 beam search. Gemini is used only for the kickoff.
-- **Invitations are explicit**, with capacity, one-team-per-Space and race safety enforced in SQL.
+- **Spaces** are the unit of isolation. A Space is one hackathon edition or one course assignment.
+  Search, matching, invitations and chat never cross Spaces, and Postgres enforces this, not the UI.
+- **Writes go through RPCs.** Tables that hold teams, members and invitations have no direct
+  insert, update or delete policies. Every write is an audited `SECURITY DEFINER` function that
+  checks the caller (`auth.uid()`), scope, Space status, role, capacity and deadlines.
+- **The LLM is outside the decision path.** Gemini writes the kickoff text only. It never sees
+  candidates outside the team and never changes scores or recommendations.
 
-### The public demo: isolated sandboxes, no password
+## Tech stack
 
-The demo is a **pool of isolated sandboxes**, slots 1…N. Each slot has its own scope `demo:<n>` and its own
-synthetic personas.
-
-| Concern | How it's handled |
+| Layer | Technology |
 |---|---|
-| Visitors interfering with each other | Each visitor **leases a free slot** (`demo_acquire_slot`, serialized by an advisory lock), so two visitors never share one. Restart and reset only touch the visitor's own slot. A start never resets a slot someone else is using. |
-| Production data | Every demo function derives its scope from a slot number (`demo:0..20`) and can never produce `prod`. Demo users only see their own scope (RLS + scoped RPCs). |
-| Session auth | httpOnly lease cookie (random 32-byte token; only its SHA-256 is stored). `proxy.ts` checks the lease on every request and signs out stale sessions. Personas sign in via supported Auth APIs with server-derived passwords (HMAC). Secrets never reach the browser. |
-| Expiry and cleanup | Hard limit `DEMO_LEASE_MINUTES` (60). A lease idle for 30 minutes frees its slot. The next visitor's start resets that slot to the fixture. |
-| Abuse | Origin check. New sandboxes are limited per visitor (salted IP hash) per hour, at most N active per visitor, plus per-sandbox limits on restart, switch and simulate. The pool is finite: when it's full, visitors get a friendly "busy, try again" message with a link to the video. |
-| Gemini cost | At most 4 Gemini kickoffs per visitor session per hour and 60 across all demo sandboxes per day (plus 6 per team per hour). Beyond that a deterministic template is used, and the UI says so. Production users are unaffected. |
+| Frontend | Next.js 16.4 (App Router), React 19, TypeScript, Tailwind CSS v4, shadcn/ui on Base UI, lucide icons |
+| Backend | Next.js Route Handlers and `proxy.ts`, Zod validation |
+| Database and auth | Supabase: Postgres 17 (RLS, PL/pgSQL RPCs, `pg_trgm`), Auth, Realtime |
+| AI | Gemini REST API with JSON-schema output, validated with Zod (default `gemini-3.6-flash`, fallback `gemini-3.5-flash-lite`) |
+| Testing | Vitest (unit and integration against local Supabase), Playwright (1440px and 375px) |
+| Hosting | Vercel (app), Supabase Cloud (database) |
 
-## Stack
+## Engineering challenges and solutions
 
-Next.js 16 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (Postgres, Auth, Realtime, RLS) ·
-Gemini · Vitest · Playwright · Vercel
+**1. A public demo with no password that can't touch real data or other visitors.**
+The demo is a pool of isolated sandboxes. Each slot has its own scope (`demo:<n>`) and its own
+~44 synthetic students.
+- A visitor leases a free slot with `demo_acquire_slot`, serialized by an advisory lock, so two
+  visitors never share a sandbox. Restart and reset only touch the visitor's own slot.
+- Every demo SQL function derives its scope from the slot number, so it can never produce `prod`.
+  RLS and scoped RPCs keep each scope invisible to the others.
+- Leases have a configurable hard limit (60 minutes by default) and free the slot after 30 minutes
+  idle. The next visitor's start resets the slot to the fixture.
+
+**2. Authentication without shared credentials.**
+- Persona passwords are `HMAC(secret, email)`, derived on the server and never stored or sent to the
+  browser. Persona emails use the reserved `.invalid` domain.
+- The lease is an httpOnly cookie holding a random 32-byte token; the database stores only its
+  SHA-256. `proxy.ts` validates the lease on every request and signs out sessions whose lease was
+  replaced or expired.
+- Only supported Supabase Auth APIs are used, with no direct writes to `auth.*` tables.
+- In production, email confirmation is on and public sign-up stays off until custom SMTP is
+  configured. The interactive demo is the way in.
+
+**3. Authorization in the database, not just the UI.**
+- All 12 public tables have RLS enabled.
+- 43 `SECURITY DEFINER` functions, every one with a pinned `search_path` and schema-qualified names.
+  Default `EXECUTE` is revoked, and grants are explicit per role.
+- Helpers live in a `private` schema that the REST API doesn't expose. Only 2 functions
+  (`search_spaces`, `get_space`) are callable without signing in.
+- A catalog-level integration test fails the test suite if any of this regresses.
+
+**4. Concurrency in team formation.**
+- One team per person per Space is a partial unique index, so two simultaneous accepts can't both win.
+- Invitation RPCs lock the team row (`FOR UPDATE`, in a consistent order) before checking capacity, so
+  "accept" and "finalize" serialize.
+- Integration tests run these races with `Promise.all`.
+
+**5. Rate limiting and AI cost.**
+- Limits are kept in a Postgres ledger (`private.api_events`): new demo sandboxes per visitor (salted
+  IP hash) per hour, active sandboxes per visitor, and restarts, persona switches and simulated joins
+  per sandbox.
+- Gemini kickoffs are capped at 6 per team per hour. Demo sandboxes also share a budget: 4 per
+  sandbox per hour and 60 across all sandboxes per day.
+- Past a limit, or on a model timeout or error, the kickoff falls back to a deterministic template
+  and the UI says so.
+- The primary model has a configurable timeout (18 s by default, 20 s maximum), then one try on a
+  faster fallback model.
+
+**6. Reliable deployment.**
+- Migrations are append-only and dry-run first (`supabase db push --dry-run`).
+- Production auth settings are versioned in `supabase/config.toml` under `[remotes.production]`.
+- `.vercelignore` keeps local env files out of CLI uploads.
+- Each release records the previous Vercel deployment as the rollback target and runs focused
+  Playwright smoke checks against production. Read-only SQL digests (`scripts/sql/prod-snapshot.sql`)
+  confirm production data is unchanged.
+
+## More than an AI wrapper
+
+- **The core decision is an algorithm, not a prompt.** Team recommendations come from a deterministic
+  optimizer with documented weights, exhaustive or beam search, and a baseline you can inspect. The
+  same input always gives the same team, and you can test it.
+- **Explanations are computed, not generated.** Labels, summaries and trade-off notes are derived
+  from the engine's numbers and unit-tested for consistency.
+- **The LLM is optional and contained.** Gemini drafts the kickoff only. It receives only the
+  team's consented matching features (no emails, bios, chat or other students), its JSON is validated
+  with Zod, and member references are checked against the team. If anything fails, the app still
+  works and shows a template.
+- **Most of the engineering is in data integrity and isolation:** RLS, RPC authorization, race-safe
+  invitations, a sandboxed public demo and rate-limited AI use.
+
+## Testing
+
+| Suite | What it covers |
+|---|---|
+| Unit (Vitest, 116 tests) | Scoring and search determinism, explanation consistency, kickoff grounding and Gemini fallback, demo lease cookies and persona passwords, input validation, Origin checks |
+| Integration (Vitest, 207 tests, local Supabase) | Every RPC called directly with real JWTs, RLS, scope uniqueness, invitation and finalize races, demo-pool isolation, expiry and budgets, catalog security audit |
+| End-to-end (Playwright, 68 test cases at 1440px and 375px) | Full recruiter journey, Spaces, teams, chat, two simultaneous visitors, idle expiry, throttling, unauthorized access, responsive layout |
+
+```bash
+npm run lint && npm run typecheck && npm test && npm run build
+npm run db:lint                                # Supabase schema linter
+E2E_SPACE_TAG=<letters> npx playwright test    # use a fresh tag per run
+```
 
 ## Local development
+
+Requires Node.js, Docker (for local Supabase) and npm.
 
 ```bash
 npm install
 npx supabase start -x studio,edge-runtime,logflare,vector,storage-api,imgproxy,postgres-meta
-# create .env.local from `npx supabase status -o env` (see .env.example)
-npm run dev-users                       # two CONFIRMED dev accounts (admin API, no email needed)
+cp .env.example .env.local      # fill in the values from `npx supabase status -o env`
+npm run dev-users               # two confirmed dev accounts via the admin API (no email needed)
 DEMO_SLOTS=4 npm run seed:demo -- --slots 1-4   # synthetic demo sandboxes (idempotent)
 npm run dev
 ```
 
-## Quality gates
+Set `DEMO_MODE_ENABLED=true` and a 32+ character `DEMO_PERSONA_SECRET` to use the one-click demo
+locally. `GEMINI_API_KEY` is optional; without it, kickoffs use the deterministic template.
+Integration tests refuse to run against anything other than local Supabase.
 
-```bash
-npm run lint && npm run typecheck && npm test && npm run build
-npm run db:lint                        # Supabase schema linter
-E2E_SPACE_TAG=<letters> npx playwright test   # 1440px and 375px; use a fresh tag per run
+## Project structure
+
+```
+app/                  Next.js routes: (app) pages, (auth), /demo, /api/* route handlers
+components/match/     Smart Team Formation (steps, settings, member cards, detailed analysis)
+lib/matching/         engine.ts (scoring + search), service.ts, view.ts, why.ts (explanations)
+lib/ai/               Gemini client and kickoff (schema, prompt, template fallback)
+lib/demo/             sandbox leases, persona sign-in, service-role client
+supabase/migrations/  schema, RLS, RPCs, demo pool, rate limits (append-only)
+tests/                unit/, integration/, e2e/
+docs/                 spec, implementation plan, public-demo design, phase handoffs
 ```
 
-`npm test` runs unit tests and integration tests against **local** Supabase. The integration tests use
-real JWTs, direct RPC calls, a catalog-level security audit, and demo-pool isolation, expiry and budget tests.
-Playwright covers the full recruiter journey, two simultaneous visitors, idle expiry, throttling and
-unauthorized access.
+## Limitations
 
-## Deployment
+- Match weights are heuristics. They aren't validated against real team outcomes.
+- The demo uses synthetic students. Public sign-up is off in production until custom SMTP is set up.
+- A Space creator gets no moderation rights, and verification of events and courses is community-level only.
 
-- Production: https://trojanmatch-jade.vercel.app (Vercel project `trojanmatch`)
-- Database: Supabase (Postgres 17). Migrations: `npx supabase db push --dry-run`, then `npx supabase db push`.
-- Demo environment (Vercel, server-only): `DEMO_MODE_ENABLED=true`, `DEMO_PERSONA_SECRET`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `DEMO_SLOTS`, `DEMO_LEASE_MINUTES`, `DEMO_STARTS_PER_HOUR`,
-  `DEMO_MAX_SESSIONS_PER_VISITOR`, `GEMINI_API_KEY`.
-- Seed the pool once per slot count: `npm run seed:demo -- --env <env file> --slots 1-N`
-  (`--no-reset` re-registers without touching sandbox data).
+## Documentation
 
-Details: spec [`docs/TrojanMatch_Final_Spec.md`](docs/TrojanMatch_Final_Spec.md) ·
-plan [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) ·
-public demo [`docs/PUBLIC_DEMO.md`](docs/PUBLIC_DEMO.md)
+[Product spec](docs/TrojanMatch_Final_Spec.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) ·
+[Public demo design](docs/PUBLIC_DEMO.md)
