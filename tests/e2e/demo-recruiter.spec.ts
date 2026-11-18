@@ -51,8 +51,10 @@ async function expectToastClearOf(page: Page, target: ReturnType<Page["locator"]
   await expect(toast).toBeVisible();
   await expect(toast).toHaveAttribute("data-mounted", "true");
   await page.waitForTimeout(450); // let the enter animation settle
-  const [t, b] = [await toast.boundingBox(), await target.boundingBox()];
-  if (!t || !b) return; // target not rendered (e.g. the chat tab is hidden on mobile)
+  // Short timeouts: a toast can auto-dismiss (or a target be hidden) between the checks; then nothing overlaps.
+  const box = (l: ReturnType<Page["locator"]>) => l.boundingBox({ timeout: 1_000 }).catch(() => null);
+  const [t, b] = [await box(toast), await box(target)];
+  if (!t || !b) return; // toast already gone, or target not rendered (e.g. the chat tab is hidden on mobile)
   const overlap = t.x < b.x + b.width && b.x < t.x + t.width && t.y < b.y + b.height && b.y < t.y + t.height;
   expect(overlap, `toast ${JSON.stringify(t)} overlaps ${JSON.stringify(b)}`).toBe(false);
 }
@@ -197,8 +199,13 @@ test.describe("Recruiter demo journey", () => {
     }
     // A toast still showing from the accept ("You joined…") must clear the starters and the composer.
     if (await page.locator("[data-sonner-toast][data-visible=true]").count()) {
-      await expectToastClearOf(page, page.getByTestId("chat-empty").locator("[data-toast-avoid]"));
-      await expectToastClearOf(page, page.locator("form[data-toast-avoid]"));
+      // Opportunistic (the toast may dismiss itself meanwhile): the toast helper tolerates that.
+      await expectToastClearOf(page, page.getByTestId("chat-empty").locator("[data-toast-avoid]")).catch(async (e) => {
+        if (await page.locator("[data-sonner-toast][data-visible=true]").count()) throw e;
+      });
+      await expectToastClearOf(page, page.locator("form[data-toast-avoid]")).catch(async (e) => {
+        if (await page.locator("[data-sonner-toast][data-visible=true]").count()) throw e;
+      });
     }
     await expect(page.getByTestId("chat-input")).toBeInViewport(); // the composer sits at the bottom, in view
     // Empty state invites the first message; a starter fills the input without sending.
