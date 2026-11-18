@@ -445,18 +445,6 @@ export function SmartFormation({
                 </ul>
               </section>
 
-              <DetailedAnalysis
-                result={result}
-                current={current}
-                option={option}
-                change={change}
-                existingTeam={!!team}
-                candidateCount={candidates.length}
-                onPickOption={pickOption}
-                open={analysisOpen}
-                onOpenChange={setAnalysisOpen}
-              />
-
               {candidates.length > 0 && (
                 <section
                   aria-labelledby="send-heading"
@@ -519,6 +507,18 @@ export function SmartFormation({
                   </div>
                 </section>
               )}
+              <DetailedAnalysis
+                result={result}
+                current={current}
+                option={option}
+                change={change}
+                existingTeam={!!team}
+                candidateCount={candidates.length}
+                onPickOption={pickOption}
+                open={analysisOpen}
+                onOpenChange={setAnalysisOpen}
+              />
+
             </>
           )}
         </section>
