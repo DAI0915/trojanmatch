@@ -80,8 +80,10 @@ test.describe("Public demo sandboxes", () => {
     // The seeded hackathon shows real counts, all labeled synthetic.
     await page.goto("/spaces?type=hackathon&q=AI%40USC");
     await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
-    await expect(page.getByTestId("participant-count")).toHaveText("32 participants in this Space (32 synthetic) · 4 teams recruiting");
+    await expect(page.getByTestId("participant-count")).toHaveText("32 participants · 4 teams recruiting");
     await expect(page.getByText("Demo sandbox · synthetic").first()).toBeVisible();
+    await page.getByTestId("event-details").locator("summary").click();
+    await expect(page.getByTestId("event-details")).toContainText("32 students (32 synthetic)");
 
     // Scope isolation: no TreeHacks 2027 yet in the sandbox (even if prod has one), and prod test Spaces are invisible.
     await page.goto("/spaces?type=hackathon&q=TreeHacks%202027");
@@ -119,7 +121,9 @@ test.describe("Public demo sandboxes", () => {
     await page.getByRole("button", { name: "Simulate joins" }).click();
     await expect(page.getByText("Simulated up to 12 synthetic participants joining.")).toBeVisible();
     await page.goto(`/s/${slug}/discover`);
-    await expect(page.getByTestId("participant-count")).toHaveText("13 participants in this Space (12 synthetic)");
+    await expect(page.getByTestId("participant-count")).toHaveText("13 participants");
+    await page.getByTestId("event-details").locator("summary").click();
+    await expect(page.getByTestId("event-details")).toContainText("13 students (12 synthetic)");
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("simulated"), fullPage: true });
 

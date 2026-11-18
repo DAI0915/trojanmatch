@@ -6,7 +6,16 @@ import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { CopyButton } from "./copy-button";
 
 /** Any participant can share the Space. Join codes are fetched on demand (participants only). */
-export function InviteLinkCard({ spaceId, emphasize = false }: { spaceId: string; emphasize?: boolean }) {
+export function InviteLinkCard({
+  spaceId,
+  emphasize = false,
+  bare = false,
+}: {
+  spaceId: string;
+  emphasize?: boolean;
+  /** Render without the card frame and heading (e.g. inside a collapsible "Share this Space"). */
+  bare?: boolean;
+}) {
   const [state, setState] = useState<
     { status: "loading" } | { status: "error"; message: string } | { status: "ready"; url: string; code: string | null }
   >({ status: "loading" });
@@ -23,13 +32,16 @@ export function InviteLinkCard({ spaceId, emphasize = false }: { spaceId: string
 
   return (
     <section
-      aria-labelledby={`invite-${spaceId}`}
-      className={`rounded-xl border p-4 sm:p-5 ${emphasize ? "border-primary/30 bg-primary/5" : "bg-card"}`}
+      aria-labelledby={bare ? undefined : `invite-${spaceId}`}
+      aria-label={bare ? "Invite link" : undefined}
+      className={bare ? "" : `rounded-xl border p-4 sm:p-5 ${emphasize ? "border-primary/30 bg-primary/5" : "bg-card"}`}
     >
-      <h2 id={`invite-${spaceId}`} className="flex items-center gap-2 font-medium">
-        <Share2 className="size-4 text-primary" aria-hidden /> Invite others to join
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      {!bare && (
+        <h2 id={`invite-${spaceId}`} className="flex items-center gap-2 font-medium">
+          <Share2 className="size-4 text-primary" aria-hidden /> Invite others to join
+        </h2>
+      )}
+      <p className={bare ? "text-sm text-muted-foreground" : "mt-1 text-sm text-muted-foreground"}>
         The link opens this Space; each person decides to join. It does not reveal who is here.
       </p>
       {state.status === "loading" && (

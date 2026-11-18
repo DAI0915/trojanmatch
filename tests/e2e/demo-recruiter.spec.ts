@@ -178,7 +178,15 @@ test.describe("Recruiter demo journey", () => {
 
     // 7. Workspace chat: the last invitee writes, Jordan reads it live.
     const last = invitees[invitees.length - 1];
-    await page.getByRole("link", { name: "Open workspace" }).click();
+    // Discover shows the current team compactly, with the workspace as the obvious next step.
+    await page.goto(`/s/${slug}/discover`);
+    const yourTeam = page.getByTestId("your-team");
+    await expect(yourTeam).toContainText("Recruiter Demo Team");
+    await expect(yourTeam).toContainText("Active · 4 members");
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("discover-team"), fullPage: false });
+    await yourTeam.getByRole("link", { name: "Open Workspace" }).click();
+    await expect(page).toHaveURL(new RegExp(`${teamUrl}/workspace$`));
     const live = async () =>
       expect(page.getByTestId("connection-status").and(page.locator('[data-state="live"]'))).toBeVisible({ timeout: 20_000 });
     await live();
@@ -438,6 +446,100 @@ test.describe("Recruiter demo journey", () => {
 
     for (const c of [a.page.request, ...clients]) await c.post("/api/demo/end", { headers: { origin }, data: {} });
     await Promise.all([a.context.close(), b.context.close(), ...clients.map((c) => c.dispose())]);
+  });
+
+  test("Discover: three stacked primary actions first, compact header, details collapsed, all entry points kept", async ({ browser }, info) => {
+    const viewport = info.project.use.viewport ?? { width: 1440, height: 900 };
+    const shot = (n: string) => `test-results/screens/discover-${n}.png`;
+    const { context, page } = await visitor(browser, viewport);
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Try Interactive Demo" }).click();
+    await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });
+    const headers = { origin: new URL(page.url()).origin };
+    await page.getByTestId("demo-guide").getByRole("button", { name: "Start exploring" }).click();
+    await page.goto("/spaces?type=hackathon&q=AI%40USC");
+    await page.getByRole("link", { name: /AI@USC Hackathon 2026/ }).click();
+    await page.waitForURL(/\/s\/[a-z0-9-]+\/discover$/);
+    const base = new URL(page.url()).pathname.replace(/\/discover$/, "");
+
+    // 1. Compact header: title + one stats line from real data.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("AI@USC Hackathon 2026");
+    await expect(page.getByTestId("participant-count")).toHaveText("32 participants · 4 teams recruiting");
+    await expect(page.getByText("Demo sandbox · synthetic data")).toBeVisible();
+    const header = (await page.locator("main header").first().boundingBox())!;
+    expect(header.height).toBeLessThanOrEqual(130);
+
+    // 2. Three primary actions, in order, stacked full width, large, visible without scrolling.
+    const nav = page.getByRole("navigation", { name: "What you can do in this Space" });
+    const cards = [nav.getByRole("link", { name: "Smart Team Formation" }), nav.getByRole("link", { name: "Find a Team" }), nav.getByRole("link", { name: "Grow My Team" })];
+    const navBox = (await nav.boundingBox())!;
+    let prevBottom = 0;
+    for (const c of cards) {
+      await expect(c).toBeVisible();
+      const b = (await c.boundingBox())!;
+      expect(Math.abs(b.width - navBox.width)).toBeLessThan(2); // full width of the column, at every viewport
+      expect(b.y).toBeGreaterThan(prevBottom); // stacked vertically
+      expect(b.height).toBeGreaterThanOrEqual(120);
+      prevBottom = b.y + b.height - 1;
+    }
+    await expect(cards[0]).toBeInViewport();
+    await expect(cards[0]).toContainText("Build My Team");
+    await expect(page.getByTestId("your-team")).toHaveCount(0); // Jordan has no team here: no empty card
+    await expect(nav.getByRole("link", { name: "Create a team" })).toHaveAttribute("href", `${base}/teams/new`);
+    await expect(nav.getByRole("link", { name: "All teams" })).toHaveAttribute("href", `${base}/teams`);
+
+    // 4. Compact preferences; the full settings stay behind Edit preferences.
+    const prefs = page.getByTestId("participation-summary");
+    for (const t of ["Goal", "Roles", "Looking for a team"]) await expect(prefs).toContainText(t);
+    await expect(page.getByRole("link", { name: /Edit preferences|Set preferences/ })).toHaveAttribute("href", `${base}/setup`);
+
+    // 5. Event details and sharing: collapsed by default, complete when opened.
+    const details = page.getByTestId("event-details");
+    const share = page.getByTestId("share-space");
+    await expect(details).not.toHaveAttribute("open", "");
+    await expect(share).not.toHaveAttribute("open", "");
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot(info.project.name), fullPage: true });
+    await details.locator("summary").click();
+    for (const t of ["Dates", "Team size", "Team deadline", "32 students (32 synthetic)", "Community-created"]) await expect(details).toContainText(t);
+    await share.locator("summary").click();
+    await expect(share.getByTestId("invite-url")).toContainText(base);
+
+    // Layout at the four widths (desktop project): stacked, no overflow, no clipped titles.
+    if (viewport.width >= 1024) {
+      await page.reload();
+      for (const size of [{ width: 375, height: 812 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
+        await page.setViewportSize(size);
+        await noHorizontalScroll(page);
+        const boxes = await Promise.all(cards.map(async (c) => (await c.boundingBox())!));
+        expect(boxes[1].y).toBeGreaterThan(boxes[0].y + boxes[0].height - 1);
+        expect(boxes[2].y).toBeGreaterThan(boxes[1].y + boxes[1].height - 1);
+        const clipped = await page.evaluate(() =>
+          [...document.querySelectorAll('[data-testid^="action-"] [id$="-title"], [data-testid^="action-"] [id$="-body"]')].filter(
+            (el) => el.scrollWidth > el.clientWidth + 1,
+          ).length,
+        );
+        expect(clipped, `clipped text at ${size.width}px`).toBe(0);
+        if (size.width >= 1024) expect((await (await nav.boundingBox())!).width).toBeGreaterThan(800); // not a narrow stack
+        await page.screenshot({ path: shot(`${size.width}`), fullPage: true });
+      }
+      await page.setViewportSize(viewport);
+    }
+
+    // The three actions go where they say.
+    for (const [name, path] of [["Smart Team Formation", "/smart"], ["Find a Team", "/find"], ["Grow My Team", "/grow"]] as const) {
+      await page.goto(`${base}/discover`);
+      await nav.getByRole("link", { name }).click();
+      await expect(page).toHaveURL(new RegExp(`${base}${path}$`));
+    }
+    // Keyboard: the cards are reachable and show a focus ring.
+    await page.goto(`${base}/discover`);
+    await cards[0].focus();
+    await expect(cards[0]).toBeFocused();
+    expect(await cards[0].evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe("none");
+
+    await page.request.post("/api/demo/end", { headers, data: {} });
+    await context.close();
   });
 
   test("two visitors at the same time get separate sandboxes and can't affect each other", async ({ browser }, info) => {

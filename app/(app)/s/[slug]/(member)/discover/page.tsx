@@ -1,17 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, CheckCircle2, Circle, Plus, Search, Settings2, Sparkles, UserPlus, UserRound, Users, UsersRound } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowRight, FlaskConical, Info, MessagesSquare, Search, Settings2, Share2, Sparkles, UserPlus, UserRound } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { ActionCard, Disclosure } from "@/components/space/discover-blocks";
 import { InviteLinkCard } from "@/components/space/invite-link-card";
-import { SpaceFacts, SpaceHeader } from "@/components/space/space-header";
+import { SpaceFacts } from "@/components/space/space-header";
 import { getSpace } from "@/lib/spaces";
 import { teamsInSpace } from "@/lib/teams";
-import { TeamCard } from "@/components/team/team-card";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { goalLabel, roleLabel } from "@/lib/taxonomy";
 import { plural } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
+const STATUS_LABEL: Record<string, string> = { draft: "Draft", forming: "Forming", active: "Active", archived: "Archived" };
+
+/**
+ * Discover: "what can I do here?" in one column.
+ *   1. Space title + one stats line
+ *   2. Three primary actions (Build / Find / Grow), stacked, full width
+ *   3. Your team (only when you're on one)
+ *   4. Compact participation summary + Edit preferences
+ *   5. Event details and Share this Space, collapsed by default
+ */
 export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/discover">) {
   const { slug } = await params;
   const space = await getSpace(slug);
@@ -29,142 +39,154 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
   ]);
   if (!part) notFound();
 
-  const { myTeam, recruiting } = await teamsInSpace(space.id, user!.id);
+  const { myTeam } = await teamsInSpace(space.id, user!.id);
   const count = Number(space.participant_count);
+  const recruitingCount = Number(space.recruiting_team_count);
   const alone = count <= 1;
+  const base = `/s/${space.slug}`;
+
+  const stats = alone
+    ? "1 member (you) · No teammates available yet"
+    : [plural(count, "participant"), recruitingCount > 0 ? `${plural(recruitingCount, "team")} recruiting` : null].filter(Boolean).join(" · ");
 
   return (
-    <>
-      <SpaceHeader space={space} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="flex flex-col gap-6">
-          {alone ? (
-            <section className="rounded-xl border border-dashed bg-card p-6 text-center" aria-labelledby="cold-heading">
-              <Sparkles className="mx-auto mb-2 size-6 text-primary" aria-hidden />
-              <h2 id="cold-heading" className="text-lg font-semibold">You&apos;re the first one here!</h2>
-              <p className="mt-1 text-sm text-muted-foreground" data-testid="participant-count">
-                1 member (you) · No teammates available yet
-              </p>
-              <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
-                Matching only uses people who have joined this Space, so there&apos;s nobody to suggest yet. Share the
-                invite link below, set up your preferences, and check back after others join.
-              </p>
-            </section>
+    <div className="mx-auto flex w-full max-w-[60rem] flex-col gap-8">
+      {/* 1. Compact header */}
+      <header className="flex flex-col gap-1.5">
+        <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          {space.is_demo ? (
+            <>
+              <FlaskConical className="size-3.5 text-brand-gold-foreground" aria-hidden /> Demo sandbox · synthetic data
+            </>
+          ) : space.type === "course" ? (
+            "Course project Space"
           ) : (
-            <section className="rounded-xl border bg-card p-5" aria-labelledby="members-heading">
-              <h2 id="members-heading" className="flex items-center gap-2 font-medium">
-                <Users className="size-4 text-primary" aria-hidden /> Who&apos;s here
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground" data-testid="participant-count">
-                {plural(count, "participant")} in this Space
-                {Number(space.synthetic_participant_count) > 0 ? ` (${space.synthetic_participant_count} synthetic)` : ""}
-                {space.recruiting_team_count > 0 ? ` · ${plural(Number(space.recruiting_team_count), "team")} recruiting` : ""}
-              </p>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Each student chooses whether their profile is visible and whether they can be suggested.
-              </p>
-            </section>
+            "Hackathon Space"
           )}
+          {space.status !== "open" && <span className="capitalize">· {space.status}</span>}
+        </p>
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight [overflow-wrap:anywhere] sm:text-3xl">{space.title}</h1>
+        <p className="text-sm text-muted-foreground" data-testid="participant-count">
+          {stats}
+        </p>
+      </header>
 
-          <nav aria-label="Find your team" className="grid gap-3 sm:grid-cols-3">
-            {[
-              { href: `/s/${space.slug}/smart`, icon: Sparkles, title: "Smart Team Formation", body: "Let AI propose a complete, balanced team.", featured: true },
-              { href: `/s/${space.slug}/find`, icon: Search, title: "Find a Team", body: "Recruiting teams ranked by fit with you. Request to join." },
-              { href: `/s/${space.slug}/grow`, icon: UserPlus, title: "Grow My Team", body: "See your team's gaps and who could fill them." },
-            ].map((c) => (
-              <Link
-                key={c.href}
-                href={c.href}
-                className={cn(
-                  "group flex flex-col rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring",
-                  c.featured && "border-primary/40 bg-primary/5",
-                )}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <c.icon className="size-4" aria-hidden />
-                  </span>
-                  <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
-                </span>
-                <span className="mt-3 block font-medium">{c.title}</span>
-                <span className="mt-1 block text-sm text-muted-foreground">{c.body}</span>
+      {/* 2. What you can do here */}
+      <nav aria-label="What you can do in this Space" className="flex flex-col gap-3.5">
+        <ActionCard
+          id="smart"
+          href={`${base}/smart`}
+          icon={Sparkles}
+          title="Smart Team Formation"
+          body="Get a complete team recommendation based on skills, goals, and availability."
+          cta="Build My Team"
+          featured
+        />
+        <ActionCard
+          id="find"
+          href={`${base}/find`}
+          icon={Search}
+          title="Find a Team"
+          body="Browse recruiting teams and request to join."
+          cta="Find a Team"
+        />
+        <ActionCard
+          id="grow"
+          href={`${base}/grow`}
+          icon={UserPlus}
+          title="Grow My Team"
+          body="Find teammates who fill the missing roles in your team."
+          cta="Grow My Team"
+        />
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm text-muted-foreground">
+          {!myTeam && space.status === "open" && (
+            <Link href={`${base}/teams/new`} className="font-medium text-primary underline-offset-4 hover:underline">
+              Create a team
+            </Link>
+          )}
+          <Link href={`${base}/teams`} className="underline-offset-4 hover:text-foreground hover:underline">
+            All teams
+          </Link>
+        </p>
+      </nav>
+
+      {/* 3. Your team (only if you're on one) */}
+      {myTeam && (
+        <section aria-labelledby="team-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5" data-testid="your-team">
+          <div className="min-w-0">
+            <h2 id="team-heading" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your team</h2>
+            <p className="mt-1 truncate text-base">
+              <Link href={`${base}/teams/${myTeam.id}`} className="font-semibold underline-offset-4 hover:underline">
+                {myTeam.name}
               </Link>
-            ))}
-          </nav>
+              <span className="text-muted-foreground">
+                {" "}· {STATUS_LABEL[myTeam.status] ?? myTeam.status} · {plural(myTeam.members, "member")}
+              </span>
+            </p>
+          </div>
+          {myTeam.status === "active" ? (
+            <Link href={`${base}/teams/${myTeam.id}/workspace`} className={cn(buttonVariants(), "w-full sm:w-auto")}>
+              <MessagesSquare data-icon="inline-start" aria-hidden /> Open Workspace
+            </Link>
+          ) : (
+            <Link href={`${base}/teams/${myTeam.id}`} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
+              View team <ArrowRight data-icon="inline-end" aria-hidden />
+            </Link>
+          )}
+        </section>
+      )}
 
-          <section className="rounded-xl border bg-card p-5" aria-labelledby="team-heading">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="team-heading" className="flex items-center gap-2 font-medium">
-                <UsersRound className="size-4 text-primary" aria-hidden /> Your team
-              </h2>
-              <Link href={`/s/${space.slug}/teams`} className="text-sm text-primary underline-offset-4 hover:underline">
-                All teams{recruiting.length ? ` (${recruiting.length} recruiting)` : ""}
-              </Link>
-            </div>
-            {myTeam ? (
-              <div className="mt-3 sm:max-w-md">
-                <TeamCard team={myTeam} href={`/s/${space.slug}/teams/${myTeam.id}`} />
-              </div>
-            ) : (
-              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">You&apos;re not on a team in this Space yet.</p>
-                {space.status === "open" && (
-                  <Link href={`/s/${space.slug}/teams/new`} className={buttonVariants({ size: "sm" })}>
-                    <Plus data-icon="inline-start" aria-hidden /> Create a team
-                  </Link>
-                )}
-              </div>
-            )}
-          </section>
-
-          <InviteLinkCard spaceId={space.id} emphasize={alone} />
-          <SpaceFacts space={space} />
+      {/* 4. Your participation, compact */}
+      <section aria-labelledby="mine-heading" className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="mine-heading" className="text-sm font-medium">Your preferences</h2>
+          <Link href={`${base}/setup`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            <Settings2 data-icon="inline-start" aria-hidden /> {part.setup_completed ? "Edit preferences" : "Set preferences"}
+          </Link>
         </div>
+        {!part.setup_completed && (
+          <p className="rounded-md bg-brand-gold/10 px-3 py-2 text-xs">You haven&apos;t set your preferences for this Space yet.</p>
+        )}
+        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3" data-testid="participation-summary">
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Goal</dt>
+            <dd className="truncate">{goalLabel(space.type, part.goal) ?? "Not set"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Roles</dt>
+            <dd className="[overflow-wrap:anywhere]">{part.desired_roles.length ? part.desired_roles.map(roleLabel).join(", ") : "Not set"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Looking for a team</dt>
+            <dd>{part.looking_for_team ? "Yes" : "No"}</dd>
+          </div>
+        </dl>
+        {profile && !profile.onboarded && (
+          <Link href="/profile?welcome=1" className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary underline-offset-4 hover:underline">
+            <UserRound className="size-4" aria-hidden /> Complete your profile so teammates know what you bring
+          </Link>
+        )}
+      </section>
 
-        <aside className="flex flex-col gap-4">
-          <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="mine-heading">
-            <h2 id="mine-heading" className="font-medium">Your participation</h2>
-            {!part.setup_completed && (
-              <p className="mt-1 rounded-md bg-brand-gold/10 px-2.5 py-1.5 text-xs">You haven&apos;t set your preferences for this Space yet.</p>
-            )}
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">Goal</dt>
-                <dd className="text-right">{goalLabel(space.type, part.goal) ?? "Not set"}</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">Roles</dt>
-                <dd className="text-right">{part.desired_roles.length ? part.desired_roles.map(roleLabel).join(", ") : "Not set"}</dd>
-              </div>
-            </dl>
-            <ul className="mt-3 flex flex-col gap-1.5 border-t pt-3 text-sm" aria-label="Consent settings">
-              <ConsentRow on={part.looking_for_team} label="Looking for a team" />
-              <ConsentRow on={part.visible_to_members} label="Profile visible to members" />
-              <ConsentRow on={part.accept_invites} label="Accepting invitations" />
-              <ConsentRow on={part.smart_match_opt_in} label="In AI team suggestions" />
-            </ul>
-            <Link href={`/s/${space.slug}/setup`} className={`${buttonVariants({ variant: "outline", size: "sm" })} mt-4 w-full`}>
-              <Settings2 data-icon="inline-start" aria-hidden /> {part.setup_completed ? "Edit preferences" : "Set preferences"}
-            </Link>
-          </section>
-          {profile && !profile.onboarded && (
-            <Link href="/profile?welcome=1" className="flex items-center gap-2 rounded-xl border border-brand-gold/60 bg-brand-gold/10 p-4 text-sm hover:bg-brand-gold/20">
-              <UserRound className="size-4 shrink-0" aria-hidden /> Complete your global profile so teammates know what you bring.
-            </Link>
+      {/* 5. Secondary details, collapsed by default (Share opens when you're the only one here). */}
+      <div className="flex flex-col gap-3">
+        <Disclosure title="Event details" icon={Info} testId="event-details">
+          <SpaceFacts space={space} bare />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Community-created: created by a student, not verified by the organizer or university.
+            {space.team_size_source === "app_default" ? " Team size unverified: an app default, not a confirmed rule." : ""}
+            {space.requires_code ? " Invite code required to join." : ""}
+          </p>
+        </Disclosure>
+        <Disclosure title="Share this Space" icon={Share2} testId="share-space" open={alone}>
+          {alone && (
+            <p className="mb-3 text-sm">
+              Matching only uses people who have joined this Space. Share the link so classmates can join.
+            </p>
           )}
-        </aside>
+          <InviteLinkCard spaceId={space.id} bare />
+        </Disclosure>
       </div>
-    </>
-  );
-}
-
-function ConsentRow({ on, label }: { on: boolean; label: string }) {
-  return (
-    <li className="flex items-center gap-2">
-      {on ? <CheckCircle2 className="size-4 text-primary" aria-hidden /> : <Circle className="size-4 text-muted-foreground" aria-hidden />}
-      <span className={on ? "" : "text-muted-foreground"}>{label}</span>
-      <span className="ml-auto text-xs text-muted-foreground">{on ? "On" : "Off"}</span>
-    </li>
+    </div>
   );
 }

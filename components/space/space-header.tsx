@@ -29,7 +29,7 @@ export function SpaceHeader({ space: s }: { space: SpaceDetail }) {
   );
 }
 
-export function SpaceFacts({ space: s }: { space: SpaceDetail }) {
+export function SpaceFacts({ space: s, bare = false }: { space: SpaceDetail; bare?: boolean }) {
   const facts: { label: string; value: React.ReactNode }[] = [];
   if (s.hackathon) {
     const h = s.hackathon;
@@ -65,7 +65,7 @@ export function SpaceFacts({ space: s }: { space: SpaceDetail }) {
   });
 
   return (
-    <dl className="grid gap-x-6 gap-y-3 rounded-xl border bg-card p-4 text-sm sm:grid-cols-2 sm:p-5">
+    <dl className={bare ? "grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2" : "grid gap-x-6 gap-y-3 rounded-xl border bg-card p-4 text-sm sm:grid-cols-2 sm:p-5"}>
       {facts.map((f) => (
         <div key={f.label} className="min-w-0">
           <dt className="text-xs text-muted-foreground">{f.label}</dt>

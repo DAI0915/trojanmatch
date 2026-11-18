@@ -114,7 +114,9 @@ test.describe("P2 acceptance: Spaces, joining, participation", () => {
     await dev1.getByRole("button", { name: "Save & continue" }).click();
     await expect(dev1).toHaveURL(new RegExp(`/s/${slug2027}/discover$`));
     await expect(dev1.getByTestId("participant-count")).toHaveText("1 member (you) · No teammates available yet");
-    await expect(dev1.getByRole("heading", { name: "You're the first one here!" })).toBeVisible();
+    // Cold start: sharing is the useful next step, so "Share this Space" starts open.
+    await expect(dev1.getByTestId("share-space")).toHaveAttribute("open", "");
+    await expect(dev1.getByTestId("share-space").getByTestId("invite-url")).toContainText(`/s/${slug2027}`);
     await noHorizontalScroll(dev1);
     await dev1.screenshot({ path: shots("C-cold-start"), fullPage: true });
 
@@ -143,9 +145,9 @@ test.describe("P2 acceptance: Spaces, joining, participation", () => {
 
     // G. Participant count is real.
     await dev1.goto(`/s/${slug2027}/discover`);
-    await expect(dev1.getByTestId("participant-count")).toHaveText("2 participants in this Space");
+    await expect(dev1.getByTestId("participant-count")).toHaveText("2 participants");
     await dev2.goto(`/s/${slug2027}/discover`);
-    await expect(dev2.getByTestId("participant-count")).toHaveText("2 participants in this Space");
+    await expect(dev2.getByTestId("participant-count")).toHaveText("2 participants");
 
     // H. TreeHacks 2026 is a distinct Space; a 2027 spelling variant is caught as a duplicate.
     await createHackathon(dev1, n, 2026);
@@ -203,7 +205,7 @@ test.describe("P2 acceptance: Spaces, joining, participation", () => {
     await expect(dev2).toHaveURL(new RegExp(`/s/${courseSlug}/setup\\?joined=1`));
     await dev2.getByRole("button", { name: "Save & continue" }).click();
     await dev1.goto(`/s/${courseSlug}/discover`);
-    await expect(dev1.getByTestId("participant-count")).toHaveText("2 participants in this Space");
+    await expect(dev1.getByTestId("participant-count")).toHaveText("2 participants");
 
     // J. Preferences and users do not leak across Spaces.
     await dev1.goto(`/s/${slug2027}/setup`);
