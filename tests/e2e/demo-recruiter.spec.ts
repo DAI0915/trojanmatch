@@ -83,11 +83,12 @@ test.describe("Recruiter demo journey", () => {
 
     // 1. Landing: the demo is the primary call to action. No sign-up, no code.
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "Try Interactive Demo" })).toBeVisible();
+    // The hero button (the header has a second, compact one sharing the same state).
+    await expect(page.getByTestId("try-demo")).toHaveText("Try Interactive Demo");
     await expect(page.getByText("No sign-up needed.")).toBeVisible();
     await noHorizontalScroll(page);
     await page.screenshot({ path: shot("landing"), fullPage: true });
-    await page.getByRole("button", { name: "Try Interactive Demo" }).click();
+    await page.getByTestId("try-demo").click();
 
     // 2. Straight into the app as Jordan, with the optional guide.
     await expect(page).toHaveURL(/\/spaces$/, { timeout: 30_000 });

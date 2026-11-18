@@ -18,8 +18,8 @@ test.describe("P1 — auth & shell @smoke", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Stop searching.");
     // The password-free interactive demo is the primary call to action (a button: one click starts it).
-    await expect(page.getByRole("button", { name: "Try Interactive Demo" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "How the demo works" })).toBeVisible();
+    await expect(page.getByTestId("try-demo")).toHaveText("Try Interactive Demo");
+    await expect(page.getByRole("link", { name: /Watch 3-min demo/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(page.getByText("not affiliated with or endorsed by USC")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

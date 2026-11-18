@@ -1,43 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Clock, Loader2, Play, PlayCircle, RotateCw } from "lucide-react";
+import { ArrowRight, Clock, Loader2, Play, PlayCircle, RotateCw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { DEMO_VIDEO_URL } from "@/lib/demo/links";
 import { cn } from "@/lib/utils";
-
-type Blocked = {
-  kind: "limit" | "busy" | "sessions" | "other";
-  title: string;
-  message: string;
-  /** When the server says a new sandbox can be started (this visitor's own throttle / the pool). */
-  retryAt: number | null;
-};
-
-function blockedFrom(e: ApiClientError): Blocked {
-  const details = (e.details ?? {}) as unknown as { retry_at?: string | null; reason?: string };
-  const at = details.retry_at ? Date.parse(details.retry_at) : NaN;
-  const retryAt = Number.isFinite(at) ? at : null;
-  if (e.code === "DEMO_DISABLED") {
-    return { kind: "other", title: "The interactive demo isn't available", message: "It's turned off on this deployment.", retryAt: null };
-  }
-  if (e.code === "DEMO_BUSY") {
-    return { kind: "busy", title: "All demo sandboxes are in use", message: "Each visitor gets a private sandbox, and they're all taken right now.", retryAt };
-  }
-  if (e.code === "RATE_LIMITED" && details.reason === "TOO_MANY_SESSIONS") {
-    return { kind: "sessions", title: "You already have demo sandboxes open", message: e.message, retryAt: null };
-  }
-  if (e.code === "RATE_LIMITED") {
-    return {
-      kind: "limit",
-      title: "Demo limit reached for your network",
-      message: "To keep sandboxes available for everyone, each network can start a limited number of new demos per hour.",
-      retryAt,
-    };
-  }
-  return { kind: "other", title: "The demo couldn't start", message: e.message, retryAt: null };
-}
+import { useDemoStart } from "./demo-start";
 
 function clock(t: number) {
   return new Date(t).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -50,9 +17,9 @@ function inMinutes(t: number, now: number) {
 
 /**
  * One click, no sign-up: leases a private synthetic sandbox and signs in as
- * Jordan Lee (synthetic). If this browser already has a sandbox it RESUMES it
- * (the server never spends a new start on that). Repeated clicks are ignored
- * while a request is in flight, and while the server says the visitor must wait.
+ * Jordan Lee (synthetic), or resumes this browser's sandbox. Shows why a start
+ * was refused (with an accurate retry time and the video as an alternative).
+ * Inside a DemoStartProvider it shares its state with other demo buttons.
  */
 export function TryDemoButton({
   label = "Try Interactive Demo",
@@ -65,49 +32,7 @@ export function TryDemoButton({
   className?: string;
   align?: "start" | "center";
 }) {
-  const [pending, setPending] = useState(false);
-  const [blocked, setBlocked] = useState<Blocked | null>(null);
-  const [resumable, setResumable] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  const inFlight = useRef(false);
-
-  // Does this browser already hold a sandbox? Then offer to resume it.
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<{ lease: boolean }>("/api/demo/status")
-      .then((r) => {
-        if (!cancelled) setResumable(r.lease);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Tick while waiting for the retry time, so the countdown and the button update by themselves.
-  const waiting = blocked?.retryAt != null && blocked.retryAt > now;
-  useEffect(() => {
-    if (!waiting) return;
-    const id = window.setInterval(() => setNow(Date.now()), 15_000);
-    return () => window.clearInterval(id);
-  }, [waiting]);
-
-  async function start() {
-    if (inFlight.current || waiting) return; // double clicks never start two sandboxes
-    inFlight.current = true;
-    setPending(true);
-    setBlocked(null);
-    try {
-      const r = await apiFetch<{ resumed: boolean }>("/api/demo/start", { method: "POST", json: {} });
-      // Full navigation so no request from a previous session can race the new cookies.
-      window.location.assign(r.resumed ? "/spaces" : "/spaces?welcome=1");
-    } catch (err) {
-      setBlocked(blockedFrom(err as ApiClientError));
-      setNow(Date.now());
-      setPending(false);
-      inFlight.current = false;
-    }
-  }
+  const { pending, blocked, resumable, now, waiting, start } = useDemoStart();
 
   const text = pending
     ? resumable
@@ -142,7 +67,7 @@ export function TryDemoButton({
           role="alert"
           data-testid="try-demo-blocked"
           data-kind={blocked.kind}
-          className="w-full max-w-md rounded-xl border border-brand-gold/60 bg-brand-gold/10 p-4 text-left text-sm"
+          className="w-full max-w-md scroll-mt-24 rounded-xl border border-brand-gold/60 bg-brand-gold/10 p-4 text-left text-sm"
         >
           <p className="font-medium text-foreground">{blocked.title}</p>
           <p className="mt-1 text-muted-foreground">{blocked.message}</p>
@@ -172,5 +97,46 @@ export function TryDemoButton({
         </div>
       )}
     </div>
+  );
+}
+
+/** A short line for first-time visitors; hidden while resuming, starting, or explaining a refusal. */
+export function DemoStartHint({ children, className }: { children: React.ReactNode; className?: string }) {
+  const { resumable, blocked, pending } = useDemoStart();
+  if (resumable || blocked || pending) return null;
+  return <p className={className}>{children}</p>;
+}
+
+/**
+ * Compact header version: same action and state (use inside a DemoStartProvider
+ * together with a TryDemoButton, which shows any "can't start" explanation).
+ */
+export function HeaderDemoButton({ className }: { className?: string }) {
+  const { pending, resumable, waiting, start } = useDemoStart();
+
+  async function onClick() {
+    await start();
+    // If the start was refused, bring the explanation (rendered by the main button) into view.
+    requestAnimationFrame(() => {
+      const panel = document.getElementById("try-demo-blocked");
+      if (!panel) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    });
+  }
+
+  return (
+    <Button onClick={onClick} disabled={pending || waiting} className={className} data-testid="try-demo-header">
+      {pending ? <Loader2 className="animate-spin" data-icon="inline-start" aria-hidden /> : null}
+      {resumable ? (
+        "Resume demo"
+      ) : (
+        <>
+          <span className="sm:hidden">Try demo</span>
+          <span className="hidden sm:inline">Try Interactive Demo</span>
+        </>
+      )}
+      {!pending && <ArrowRight data-icon="inline-end" aria-hidden />}
+    </Button>
   );
 }
