@@ -24,6 +24,8 @@ let db: pg.Client;
 const people = new Map<number, TestUser[]>(); // slot -> personas (index 0 = jordan)
 let prodUser: TestUser;
 let savedSlots: Record<string, unknown>[] = [];
+// Demo Gemini usage recorded by other local runs (E2E sandboxes, earlier test runs).
+let savedAiEvents: { subject: string; kind: string; created_at: string }[] = [];
 
 function fixture(slot: number) {
   return {
@@ -55,6 +57,14 @@ async function spaceCount(slot: number) {
 
 beforeAll(async () => {
   db = await dbClient();
+  // The demo Gemini budget has a cap shared by ALL sandboxes over a rolling 24 h, so
+  // usage left by earlier local runs would make these assertions depend on run
+  // history. Set it aside for the duration of the file and put it back afterwards
+  // (with the original timestamps), so the budget starts empty and the local
+  // ledger ends exactly as it was. Local DB only (see setup.ts).
+  const aside = await db.query(
+    `delete from private.api_events where kind = 'demo_ai_kickoff' returning subject, kind, created_at::text as created_at`);
+  savedAiEvents = aside.rows;
   const { rows } = await db.query(`select * from private.demo_slots where slot between 1 and 16`);
   savedSlots = rows;
   await db.query(
@@ -88,6 +98,9 @@ afterAll(async () => {
   await db.query(`delete from private.demo_slots where slot = any($1)`, [[...SLOTS]]);
   await db.query(`delete from private.api_events where kind = 'demo_ai_kickoff' and (subject like any($1) or subject = 'demo:16#test')`,
     [SLOTS.map((s) => `demo:${s}#%`)]);
+  for (const e of savedAiEvents) {
+    await db.query(`insert into private.api_events (subject, kind, created_at) values ($1, $2, $3::timestamptz)`, [e.subject, e.kind, e.created_at]);
+  }
   await db.query(`delete from private.demo_slots where slot between 1 and 16`);
   for (const r of savedSlots) {
     await db.query(
