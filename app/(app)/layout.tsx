@@ -51,7 +51,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
           <UserMenu name={profile?.display_name ?? "Student"} synthetic={profile?.is_synthetic ?? false} />
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        {/* The team workspace opts into a wide layout (data-wide-page); every other page keeps max-w-5xl. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8 has-[[data-wide-page]]:max-w-[1600px] lg:has-[[data-wide-page]]:px-8">
+          {children}
+        </main>
       </div>
     </div>
   );

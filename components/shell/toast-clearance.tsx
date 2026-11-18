@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-
-/** How tall the strip at the bottom of the screen is where toasts appear (toast + offset). */
-const TOAST_BAND = 112;
+import { toastClearance } from "@/lib/toast-clearance";
 
 /**
  * Keeps bottom toasts clear of the controls people are using. Any element marked
  * `data-toast-avoid` (chat composer, sticky Save bars, Send invitations) that
  * reaches into the toast area at the bottom of the viewport lifts the toaster
- * just above it via the `--toast-clearance` CSS variable. Layout only.
+ * just above it, and above anything stacked right on top of it (e.g. chat starter
+ * prompts above the composer), via the `--toast-clearance` CSS variable. Layout only.
  */
 export function ToastClearance() {
   useEffect(() => {
@@ -17,14 +16,8 @@ export function ToastClearance() {
     let last = "";
     const update = () => {
       frame = 0;
-      const vh = window.innerHeight;
-      let clearance = 0;
-      for (const el of document.querySelectorAll<HTMLElement>("[data-toast-avoid]")) {
-        const r = el.getBoundingClientRect();
-        if (r.height === 0 || r.top >= vh || r.bottom <= vh - TOAST_BAND) continue;
-        clearance = Math.max(clearance, vh - r.top + 8);
-      }
-      const value = `${Math.round(Math.min(clearance, vh * 0.6))}px`;
+      const boxes = [...document.querySelectorAll<HTMLElement>("[data-toast-avoid]")].map((el) => el.getBoundingClientRect());
+      const value = `${toastClearance(boxes, window.innerHeight)}px`;
       if (value !== last) {
         last = value;
         document.documentElement.style.setProperty("--toast-clearance", value);

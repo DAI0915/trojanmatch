@@ -185,14 +185,20 @@ test.describe("Recruiter demo journey", () => {
     await expect(page.getByTestId("kickoff-panel")).toBeHidden();
     const chatBox = (await page.getByTestId("team-chat").boundingBox())!;
     if (!mobile) {
+      // Compact sidebar, dominant chat (1440px).
       const side = (await page.getByTestId("workspace-sidebar").boundingBox())!;
       const share = chatBox.width / (chatBox.width + side.width);
-      expect(share, `chat share ${share.toFixed(2)}`).toBeGreaterThan(0.68);
-      expect(share).toBeLessThan(0.8);
+      expect(share, `chat share ${share.toFixed(2)}`).toBeGreaterThan(0.7);
+      expect(side.width).toBeLessThanOrEqual(280);
       await expect(page.getByTestId("workspace-members")).toContainText("Jordan Lee");
     } else {
       expect(chatBox.width).toBeGreaterThan(viewport.width - 48);
       await expect(page.getByTestId("workspace-sidebar")).toBeHidden();
+    }
+    // A toast still showing from the accept ("You joined…") must clear the starters and the composer.
+    if (await page.locator("[data-sonner-toast][data-visible=true]").count()) {
+      await expectToastClearOf(page, page.getByTestId("chat-empty").locator("[data-toast-avoid]"));
+      await expectToastClearOf(page, page.locator("form[data-toast-avoid]"));
     }
     await expect(page.getByTestId("chat-input")).toBeInViewport(); // the composer sits at the bottom, in view
     // Empty state invites the first message; a starter fills the input without sending.
@@ -222,6 +228,31 @@ test.describe("Recruiter demo journey", () => {
     await expect(page.getByTestId("chat-message").filter({ hasText: text }).getByTestId("chat-author")).toHaveText(last);
     await expect(page.getByTestId("chat-day").first()).toHaveText("Today");
     await page.screenshot({ path: shot("workspace-chat"), fullPage: false });
+    if (!mobile) {
+      // Wide screens: the workspace (only) widens to ~1600px; the sidebar stays compact and bubbles stay readable.
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      const main = page.locator("main");
+      await expect.poll(async () => (await main.boundingBox())!.width).toBeGreaterThan(1400);
+      expect((await main.boundingBox())!.width).toBeLessThanOrEqual(1600);
+      const side = (await page.getByTestId("workspace-sidebar").boundingBox())!;
+      const chat = (await page.getByTestId("team-chat").boundingBox())!;
+      expect(side.width).toBeLessThanOrEqual(280);
+      expect(chat.width / (chat.width + side.width)).toBeGreaterThan(0.75);
+      const long = "Here is a longer message to check that bubbles keep a comfortable reading width on wide screens. ".repeat(4).trim();
+      await page.getByTestId("chat-input").fill(long);
+      await page.getByTestId("chat-input").press("Enter");
+      const bubble = page.getByTestId("chat-message").filter({ hasText: long }).getByTestId("chat-body");
+      await expect(bubble).toBeVisible();
+      expect((await bubble.boundingBox())!.width).toBeLessThanOrEqual(642); // 40rem cap, not the full chat width
+      await noHorizontalScroll(page);
+      await page.screenshot({ path: shot("workspace-1920"), fullPage: false });
+      // Other pages keep the regular width.
+      await page.goto("/spaces");
+      expect((await page.locator("main").boundingBox())!.width).toBeLessThanOrEqual(1024);
+      await page.setViewportSize(viewport);
+      await page.goto(`${teamUrl}/workspace`);
+      await live();
+    }
 
     // 8. AI Kickoff.
     await page.getByRole("tab", { name: "AI Kickoff" }).click(); // a tab on every viewport (chat is the default)

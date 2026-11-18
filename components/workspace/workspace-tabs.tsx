@@ -12,8 +12,8 @@ const TABS = [
 type Tab = (typeof TABS)[number]["key"];
 
 /**
- * Chat-first workspace. Desktop: a narrow members sidebar (~25%) and the main
- * column (~75%) with tabs: Chat (default) · AI Kickoff · Team details.
+ * Chat-first workspace. Desktop: a compact members sidebar (15–17rem) and the
+ * main column (the rest) with tabs: Chat (default) · AI Kickoff · Team details.
  * Mobile: the same tabs; the members list shows under Team details.
  * Every panel stays mounted, so switching tabs keeps the live chat connection
  * and an unsent draft.
@@ -42,7 +42,7 @@ export function WorkspaceTabs({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(13rem,1fr)_minmax(0,3fr)]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]">
       <aside
         aria-label="Team members"
         className={cn("order-last lg:order-none lg:block", tab === "details" ? "block" : "hidden")}
@@ -82,10 +82,10 @@ export function WorkspaceTabs({
         <div id="ws-panel-chat" role="tabpanel" aria-labelledby="ws-tab-chat" hidden={tab !== "chat"}>
           {chat}
         </div>
-        <div id="ws-panel-kickoff" role="tabpanel" aria-labelledby="ws-tab-kickoff" hidden={tab !== "kickoff"}>
+        <div id="ws-panel-kickoff" role="tabpanel" aria-labelledby="ws-tab-kickoff" hidden={tab !== "kickoff"} className="max-w-4xl">
           {kickoff}
         </div>
-        <div id="ws-panel-details" role="tabpanel" aria-labelledby="ws-tab-details" hidden={tab !== "details"}>
+        <div id="ws-panel-details" role="tabpanel" aria-labelledby="ws-tab-details" hidden={tab !== "details"} className="max-w-4xl">
           {details}
         </div>
       </div>

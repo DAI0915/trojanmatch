@@ -46,7 +46,7 @@ export default async function WorkspacePage({ params }: PageProps<"/s/[slug]/tea
 
   return (
     <>
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <header data-wide-page className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href={`/s/${slug}/teams/${w.team.id}`}
@@ -61,7 +61,7 @@ export default async function WorkspacePage({ params }: PageProps<"/s/[slug]/tea
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex -space-x-1.5 lg:hidden" aria-hidden>
+          <span className="flex gap-0.5 lg:hidden" aria-hidden>
             {w.members.slice(0, 5).map((m) => (
               <PersonAvatar key={m.id} name={m.name} size="sm" className="ring-2 ring-background" />
             ))}

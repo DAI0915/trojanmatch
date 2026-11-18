@@ -250,7 +250,7 @@ export function TeamChat({
                 Say hi, then agree on a first meeting time and who does what.
               </p>
             </div>
-            <div className="flex flex-wrap justify-center gap-2" aria-label="Message ideas">
+            <div data-toast-avoid className="flex flex-wrap justify-center gap-2" aria-label="Message ideas">
               {STARTERS.map((t) => (
                 <button
                   key={t}
@@ -291,7 +291,7 @@ export function TeamChat({
                   data-mine={mine}
                 >
                   {!mine && (grouped ? <span className="w-7 shrink-0" aria-hidden /> : <PersonAvatar name={names.get(m.author_id)} size="sm" className="mt-4" />)}
-                  <div className={cn("flex min-w-0 max-w-[80%] flex-col sm:max-w-[70%]", mine ? "items-end" : "items-start")}>
+                  <div className={cn("flex min-w-0 max-w-[80%] flex-col sm:max-w-[min(70%,40rem)]", mine ? "items-end" : "items-start")}>
                     <span className={cn("mb-0.5 text-xs text-muted-foreground", grouped && "sr-only")}>
                       <span className="font-medium text-foreground" data-testid="chat-author">{author}</span>
                       {" · "}
@@ -314,7 +314,7 @@ export function TeamChat({
             })}
             {pending.map((p) => (
               <li key={p.client_id} className="flex flex-col items-end" data-testid="chat-pending" data-state={p.state}>
-                <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary/60 sm:max-w-[70%] px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
+                <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary/60 sm:max-w-[min(70%,40rem)] px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
                 {p.state === "sending" ? (
                   <span className="mt-0.5 text-xs text-muted-foreground">Sending…</span>
                 ) : (
