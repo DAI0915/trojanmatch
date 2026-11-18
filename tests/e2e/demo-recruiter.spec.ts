@@ -482,6 +482,29 @@ test.describe("Recruiter demo journey", () => {
       expect(b.height).toBeGreaterThanOrEqual(120);
       prevBottom = b.y + b.height - 1;
     }
+    // One design for all three: identical computed styles (card, icon tile, CTA) and equal heights.
+    const styleOf = (c: (typeof cards)[number]) =>
+      c.evaluate((el) => {
+        const pick = (e: Element | null, keys: string[]) => {
+          const cs = e ? getComputedStyle(e) : null;
+          return keys.map((k) => cs?.getPropertyValue(k)).join("|");
+        };
+        const [icon, , , cta] = [...el.children];
+        return [
+          pick(el, ["border-top-color", "border-radius", "box-shadow", "padding-top", "padding-left"]),
+          pick(icon, ["background-color", "color", "width", "height", "border-radius"]),
+          pick(cta, ["background-color", "color", "border-top-width", "font-size", "padding-left"]),
+          pick(el.querySelector('[id$="-title"]'), ["font-size", "font-weight"]),
+          pick(el.querySelector('[id$="-body"]'), ["font-size", "color"]),
+        ].join(" / ");
+      });
+    await page.mouse.move(0, 0); // compare resting states (no card hovered)
+    await page.waitForTimeout(250); // let hover transitions settle
+    const styles = await Promise.all(cards.map(styleOf));
+    expect(styles[1]).toBe(styles[0]);
+    expect(styles[2]).toBe(styles[0]);
+    const heights = await Promise.all(cards.map(async (c) => Math.round((await c.boundingBox())!.height)));
+    expect(Math.max(...heights) - Math.min(...heights), `heights ${heights.join(",")}`).toBeLessThanOrEqual(viewport.width >= 640 ? 1 : 24);
     await expect(cards[0]).toBeInViewport();
     await expect(cards[0]).toContainText("Build My Team");
     await expect(page.getByTestId("your-team")).toHaveCount(0); // Jordan has no team here: no empty card

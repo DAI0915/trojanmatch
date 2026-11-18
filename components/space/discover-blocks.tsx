@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * One of the three primary actions on Discover: a large, full-width link card.
+ * All three use this one component with identical styling (equal visual weight).
  * The accessible name is the title; the description is attached as its
  * description. The CTA text is visual only (the whole card is the link).
  */
@@ -13,7 +14,6 @@ export function ActionCard({
   title,
   body,
   cta,
-  featured = false,
   id,
 }: {
   href: string;
@@ -21,7 +21,6 @@ export function ActionCard({
   title: string;
   body: string;
   cta: string;
-  featured?: boolean;
   id: string;
 }) {
   // One grid, two arrangements. Mobile: [icon title] / [description] / [CTA].
@@ -36,16 +35,11 @@ export function ActionCard({
         "group grid min-h-[8.25rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 rounded-2xl border bg-card p-5",
         "sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-6 sm:gap-y-1 sm:p-7",
         "transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-md",
+        "border-primary/35 shadow-sm active:shadow-sm",
         "focus-visible:border-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        featured && "border-primary/35 shadow-sm",
       )}
     >
-      <span
-        className={cn(
-          "flex size-12 items-center justify-center rounded-xl sm:row-span-2 sm:size-14",
-          featured ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
-        )}
-      >
+      <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground sm:row-span-2 sm:size-14">
         <Icon className="size-6" aria-hidden />
       </span>
       <span id={`${id}-title`} className="text-xl font-semibold leading-tight tracking-tight sm:self-end sm:text-[1.375rem]">
@@ -59,9 +53,7 @@ export function ActionCard({
         className={cn(
           "col-span-2 inline-flex items-center gap-1.5 justify-self-start rounded-lg px-4 py-2 text-sm font-medium transition-colors",
           "sm:col-span-1 sm:col-start-3 sm:row-span-2 sm:row-start-1",
-          featured
-            ? "bg-primary text-primary-foreground group-hover:bg-primary/90"
-            : "border text-foreground group-hover:border-primary/50 group-hover:text-primary",
+          "bg-primary text-primary-foreground group-hover:bg-primary/90 group-active:bg-primary/80",
         )}
       >
         {cta}

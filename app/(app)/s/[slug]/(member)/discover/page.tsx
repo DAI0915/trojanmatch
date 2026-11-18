@@ -80,7 +80,6 @@ export default async function DiscoverPage({ params }: PageProps<"/s/[slug]/disc
           title="Smart Team Formation"
           body="Get a complete team recommendation based on skills, goals, and availability."
           cta="Build My Team"
-          featured
         />
         <ActionCard
           id="find"
