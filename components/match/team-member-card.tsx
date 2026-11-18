@@ -73,6 +73,11 @@ export function TeamMemberCard({
         {m.kind === "candidate" && (
           <span className="text-muted-foreground" title={kind.hint} data-testid="member-kind">{kind.label}</span>
         )}
+        {m.synthetic && (
+          <span className="rounded border border-brand-gold/60 bg-brand-gold/10 px-1.5 py-px text-[11px] text-foreground/80" data-testid="member-synthetic">
+            Synthetic profile
+          </span>
+        )}
         <button
           type="button"
           aria-expanded={open}

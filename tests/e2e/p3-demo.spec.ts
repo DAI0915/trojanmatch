@@ -352,6 +352,7 @@ test.describe("Public demo sandboxes", () => {
     await expect(page.locator('[data-testid="member-card"][data-kind="you"]').getByRole("button", { name: /^Replace/ })).toHaveCount(0);
     await expect(page.locator('[data-testid="member-card"][data-kind="candidate"]')).toHaveCount(3);
     await expect(page.getByTestId("member-kind").filter({ hasText: "Not invited yet" })).toHaveCount(3);
+    await expect(page.getByTestId("member-synthetic")).toHaveCount(4); // synthetic labeling visible on every card
 
     // D. Plain-language summary first; every computed detail one click away.
     await expect(page.getByTestId("match-label")).toHaveText(/(Strong|Good|Fair|Weak) match/);
