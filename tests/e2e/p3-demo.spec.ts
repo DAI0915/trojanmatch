@@ -712,7 +712,7 @@ test.describe("Public demo sandboxes", () => {
     await expect(page).toHaveURL(new RegExp(`${workspace}$`));
     await expect(page.getByTestId("workspace-title")).toHaveText("Trojan Builders");
     await expect(page.getByTestId("workspace-space")).toHaveText("TreeHacks 2027");
-    if (mobile) await page.getByRole("tab", { name: "Team" }).click();
+    if (mobile) await page.getByRole("tab", { name: "Team details" }).click();
     for (const n of ["Jordan Lee", "Maya Chen", "Priya Raman"]) await expect(page.getByTestId("workspace-members")).toContainText(n);
     await live();
     await expect(page.getByTestId("chat-empty")).toBeVisible();
@@ -737,7 +737,7 @@ test.describe("Public demo sandboxes", () => {
     await page.screenshot({ path: shot("chat"), fullPage: true });
 
     // G. AI Kickoff (Gemini when configured on the server; otherwise the labeled deterministic template).
-    if (mobile) await page.getByRole("tab", { name: "AI Kickoff" }).click();
+    await page.getByRole("tab", { name: "AI Kickoff" }).click();
     await expect(page.getByTestId("kickoff-empty")).toBeVisible();
     await page.getByRole("button", { name: "Generate kickoff" }).click();
     const kickoff = page.getByTestId("kickoff-content");
@@ -751,7 +751,7 @@ test.describe("Public demo sandboxes", () => {
     await page.screenshot({ path: shot("kickoff"), fullPage: true });
     // Persisted: reload shows the same kickoff.
     await page.reload();
-    if (mobile) await page.getByRole("tab", { name: "AI Kickoff" }).click();
+    await page.getByRole("tab", { name: "AI Kickoff" }).click();
     await expect(page.getByTestId("kickoff-content")).toBeVisible();
 
     // H. Reset: the team, its chat and kickoff disappear with the sandbox.

@@ -180,6 +180,38 @@ test.describe("Recruiter demo journey", () => {
     const live = async () =>
       expect(page.getByTestId("connection-status").and(page.locator('[data-state="live"]'))).toBeVisible({ timeout: 20_000 });
     await live();
+    // Chat-first layout: Chat is the default tab and the main region; Kickoff and details are tabs.
+    await expect(page.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("kickoff-panel")).toBeHidden();
+    const chatBox = (await page.getByTestId("team-chat").boundingBox())!;
+    if (!mobile) {
+      const side = (await page.getByTestId("workspace-sidebar").boundingBox())!;
+      const share = chatBox.width / (chatBox.width + side.width);
+      expect(share, `chat share ${share.toFixed(2)}`).toBeGreaterThan(0.68);
+      expect(share).toBeLessThan(0.8);
+      await expect(page.getByTestId("workspace-members")).toContainText("Jordan Lee");
+    } else {
+      expect(chatBox.width).toBeGreaterThan(viewport.width - 48);
+      await expect(page.getByTestId("workspace-sidebar")).toBeHidden();
+    }
+    await expect(page.getByTestId("chat-input")).toBeInViewport(); // the composer sits at the bottom, in view
+    // Empty state invites the first message; a starter fills the input without sending.
+    const empty = page.getByTestId("chat-empty");
+    await expect(empty).toContainText("Start the conversation");
+    await empty.getByRole("button", { name: "When can everyone meet this week?" }).click();
+    await expect(page.getByTestId("chat-input")).toHaveValue("When can everyone meet this week?");
+    await expect(page.getByTestId("chat-input")).toBeFocused();
+    await expect(page.getByTestId("chat-message")).toHaveCount(0);
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: shot("workspace-empty"), fullPage: false });
+    // Fit score, shared hours and availability live under Team details.
+    await page.getByRole("tab", { name: "Team details" }).click();
+    await expect(page.getByTestId("workspace-details")).toContainText("Team fit");
+    await expect(page.getByTestId("workspace-details")).toContainText("h/week when everyone is free");
+    if (mobile) await expect(page.getByTestId("workspace-members")).toBeVisible();
+    await page.getByRole("tab", { name: "Chat" }).click();
+    await expect(page.getByTestId("chat-input")).toHaveValue("When can everyone meet this week?"); // draft kept across tabs
+    await page.getByTestId("chat-input").fill("");
     const text = `Hi team, ${last.split(" ")[0]} here. Excited to build this!`;
     await page.getByTestId("chat-input").fill(text);
     await page.getByTestId("chat-input").press("Enter");
@@ -188,9 +220,11 @@ test.describe("Recruiter demo journey", () => {
     await page.goto(`${teamUrl}/workspace`);
     await live();
     await expect(page.getByTestId("chat-message").filter({ hasText: text }).getByTestId("chat-author")).toHaveText(last);
+    await expect(page.getByTestId("chat-day").first()).toHaveText("Today");
+    await page.screenshot({ path: shot("workspace-chat"), fullPage: false });
 
     // 8. AI Kickoff.
-    if (mobile) await page.getByRole("tab", { name: "AI Kickoff" }).click();
+    await page.getByRole("tab", { name: "AI Kickoff" }).click(); // a tab on every viewport (chat is the default)
     await page.getByRole("button", { name: "Generate kickoff" }).click();
     const kickoff = page.getByTestId("kickoff-content");
     await expect(kickoff).toBeVisible({ timeout: 45_000 });

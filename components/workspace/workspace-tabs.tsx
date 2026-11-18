@@ -1,39 +1,94 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Info, MessageSquare, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { key: "chat", label: "Chat" },
-  { key: "kickoff", label: "AI Kickoff" },
-  { key: "team", label: "Team" },
+  { key: "chat", label: "Chat", short: "Chat", icon: MessageSquare },
+  { key: "kickoff", label: "AI Kickoff", short: "AI Kickoff", icon: Sparkles },
+  { key: "details", label: "Team details", short: "Details", icon: Info },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
-/** Desktop: three columns. Mobile (<lg): tab switch between the same panels. */
-export function WorkspaceTabs({ chat, kickoff, team }: { chat: React.ReactNode; kickoff: React.ReactNode; team: React.ReactNode }) {
+/**
+ * Chat-first workspace. Desktop: a narrow members sidebar (~25%) and the main
+ * column (~75%) with tabs: Chat (default) · AI Kickoff · Team details.
+ * Mobile: the same tabs; the members list shows under Team details.
+ * Every panel stays mounted, so switching tabs keeps the live chat connection
+ * and an unsent draft.
+ */
+export function WorkspaceTabs({
+  sidebar,
+  chat,
+  kickoff,
+  details,
+}: {
+  sidebar: React.ReactNode;
+  chat: React.ReactNode;
+  kickoff: React.ReactNode;
+  details: React.ReactNode;
+}) {
   const [tab, setTab] = useState<Tab>("chat");
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function onKey(e: React.KeyboardEvent, i: number) {
+    const next = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : null;
+    if (next === null) return;
+    e.preventDefault();
+    const j = (next + TABS.length) % TABS.length;
+    setTab(TABS[j].key);
+    refs.current[j]?.focus();
+  }
+
   return (
-    <>
-      <div role="tablist" aria-label="Workspace sections" className="mb-4 grid grid-cols-3 gap-1 rounded-lg border bg-card p-1 lg:hidden">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            type="button"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={cn("rounded-md px-2 py-1.5 text-sm", tab === t.key ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(13rem,1fr)_minmax(0,3fr)]">
+      <aside
+        aria-label="Team members"
+        className={cn("order-last lg:order-none lg:block", tab === "details" ? "block" : "hidden")}
+        data-testid="workspace-sidebar"
+      >
+        {sidebar}
+      </aside>
+
+      <div className="flex min-w-0 flex-col gap-3">
+        <div role="tablist" aria-label="Workspace sections" className="flex gap-1 border-b">
+          {TABS.map((t, i) => (
+            <button
+              key={t.key}
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              id={`ws-tab-${t.key}`}
+              role="tab"
+              type="button"
+              aria-label={t.label}
+              aria-selected={tab === t.key}
+              aria-controls={`ws-panel-${t.key}`}
+              tabIndex={tab === t.key ? 0 : -1}
+              onClick={() => setTab(t.key)}
+              onKeyDown={(e) => onKey(e, i)}
+              className={cn(
+                "-mb-px inline-flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:flex-none",
+                tab === t.key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <t.icon className="size-4 shrink-0" aria-hidden />
+              <span className="whitespace-nowrap sm:hidden">{t.short}</span>
+              <span className="hidden whitespace-nowrap sm:inline">{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <div id="ws-panel-chat" role="tabpanel" aria-labelledby="ws-tab-chat" hidden={tab !== "chat"}>
+          {chat}
+        </div>
+        <div id="ws-panel-kickoff" role="tabpanel" aria-labelledby="ws-tab-kickoff" hidden={tab !== "kickoff"}>
+          {kickoff}
+        </div>
+        <div id="ws-panel-details" role="tabpanel" aria-labelledby="ws-tab-details" hidden={tab !== "details"}>
+          {details}
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[15rem_minmax(0,1fr)_24rem]">
-        <div className={cn(tab !== "team" && "hidden", "lg:block")}>{team}</div>
-        <div className={cn(tab !== "chat" && "hidden", "lg:block")}>{chat}</div>
-        <div className={cn(tab !== "kickoff" && "hidden", "lg:block lg:max-h-[calc(100dvh-14rem)] lg:overflow-y-auto")}>{kickoff}</div>
-      </div>
-    </>
+    </div>
   );
 }

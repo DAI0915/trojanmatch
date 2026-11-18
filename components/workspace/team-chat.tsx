@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, MessageSquare, RotateCw, Send, Wifi, WifiOff } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, Loader2, MessageSquare, RotateCw, Send, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +22,22 @@ function sortMerge(current: Message[], incoming: Message[]): Message[] {
 }
 
 const timeFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const clockFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+const dayFmt = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric" });
+
+/** "Today", "Yesterday" or "Monday, Nov 16" for the separators between days. */
+function dayLabel(iso: string, now = new Date()) {
+  const d = new Date(iso);
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(now) - start(d)) / 86_400_000);
+  return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : dayFmt.format(d);
+}
+
+const STARTERS = [
+  "Hi team! Excited to build this together 👋",
+  "When can everyone meet this week?",
+  "How should we split the roles?",
+];
 
 /**
  * Team chat. History is server-rendered; new messages arrive over Supabase
@@ -34,11 +50,14 @@ export function TeamChat({
   meId,
   members,
   initial,
+  othersNames = [],
 }: {
   teamId: string;
   meId: string;
   members: { id: string; name: string }[];
   initial: Message[];
+  /** Teammates other than the viewer, for the empty state. */
+  othersNames?: string[];
 }) {
   const [messages, setMessages] = useState<Message[]>(initial);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -46,6 +65,12 @@ export function TeamChat({
   const [conn, setConn] = useState<Conn>("connecting");
   const [loadError, setLoadError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLElement>(null);
+  const [fitHeight, setFitHeight] = useState<number | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Follow new messages only while the reader is at the bottom (don't yank them away from history).
+  const atBottom = useRef(true);
+  const [unseen, setUnseen] = useState(0);
   const names = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
 
   const add = useCallback((incoming: Message[]) => {
@@ -100,14 +125,61 @@ export function TeamChat({
     };
   }, [teamId, add, refetch]);
 
+  const scrollToEnd = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottom.current = true;
+    setUnseen(0);
+  }, []);
+
+  // New messages: stay pinned to the newest one if the reader is at the bottom; otherwise count them.
+  const lastCount = useRef(messages.length + pending.length);
+  useEffect(() => {
+    const total = messages.length + pending.length;
+    const added = total - lastCount.current;
+    lastCount.current = total;
+    if (atBottom.current) scrollToEnd();
+    else if (added > 0) setUnseen((n) => n + added);
+  }, [messages.length, pending.length, scrollToEnd]);
+
+  // The panel can be hidden (another tab) or resized; when it shows again, keep the newest message in view.
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, pending.length]);
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (atBottom.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Fill the screen below the panel so the composer always sits at the bottom of the viewport,
+  // whatever is above it (demo bar, header). Falls back to the CSS height before hydration.
+  useEffect(() => {
+    const fit = () => {
+      const el = boxRef.current;
+      if (!el || el.offsetParent === null) return; // hidden tab: keep the last size
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const min = window.innerWidth >= 1024 ? 480 : 360;
+      setFitHeight(Math.max(min, Math.floor(window.innerHeight - top - 16)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
+  function onScroll() {
+    const el = listRef.current;
+    if (!el || el.clientHeight === 0) return;
+    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    if (atBottom.current) setUnseen(0);
+  }
 
   async function send(body: string, clientId: string = crypto.randomUUID()) {
     const text = body.trim();
     if (!text) return;
+    atBottom.current = true; // your own message always scrolls into view
     setPending((p) => [...p.filter((x) => x.client_id !== clientId), { client_id: clientId, body: text, state: "sending" }]);
     try {
       const r = await apiFetch<{ message: Message }>(`/api/teams/${teamId}/messages`, { method: "POST", json: { body: text, client_id: clientId } });
@@ -126,9 +198,15 @@ export function TeamChat({
 
   const ConnIcon = conn === "live" ? Wifi : conn === "connecting" ? Loader2 : WifiOff;
   return (
-    <section aria-labelledby="chat-heading" className="flex h-[70dvh] min-h-[420px] flex-col rounded-xl border bg-card lg:h-[calc(100dvh-14rem)]">
-      <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-        <h2 id="chat-heading" className="flex items-center gap-2 font-medium">
+    <section
+      ref={boxRef}
+      style={fitHeight ? { height: fitHeight } : undefined}
+      aria-labelledby="chat-heading"
+      className="relative flex h-[calc(100dvh-13rem)] min-h-[420px] flex-col overflow-hidden rounded-xl border bg-card lg:h-[calc(100dvh-15rem)] lg:min-h-[480px]"
+      data-testid="team-chat"
+    >
+      <header className="flex items-center justify-between gap-2 border-b px-4 py-2">
+        <h2 id="chat-heading" className="flex items-center gap-2 text-sm font-medium">
           <MessageSquare className="size-4 text-primary" aria-hidden /> Team chat
         </h2>
         <span
@@ -142,7 +220,14 @@ export function TeamChat({
         </span>
       </header>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite" aria-label="Messages" data-testid="chat-list">
+      <div
+        ref={listRef}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto bg-muted/30 px-3 py-4 sm:px-5"
+        aria-live="polite"
+        aria-label="Messages"
+        data-testid="chat-list"
+      >
         {loadError && (
           <p role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {loadError}
@@ -150,10 +235,36 @@ export function TeamChat({
           </p>
         )}
         {messages.length === 0 && pending.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground" data-testid="chat-empty">
-            <MessageSquare className="mb-2 size-6" aria-hidden />
-            <p className="font-medium text-foreground">No messages yet</p>
-            <p>Say hi and agree on your first meeting time.</p>
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center text-sm" data-testid="chat-empty">
+            {othersNames.length > 0 && (
+              <span className="flex -space-x-2" aria-hidden>
+                {othersNames.slice(0, 5).map((n) => (
+                  <PersonAvatar key={n} name={n} className="ring-2 ring-background" />
+                ))}
+              </span>
+            )}
+            <div>
+              <p className="text-base font-semibold text-foreground">Start the conversation</p>
+              <p className="mt-1 max-w-sm text-muted-foreground">
+                {othersNames.length > 0 ? `${listNames(othersNames)} ${othersNames.length === 1 ? "is" : "are"} on this team. ` : ""}
+                Say hi, then agree on a first meeting time and who does what.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2" aria-label="Message ideas">
+              {STARTERS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setDraft(t);
+                    inputRef.current?.focus();
+                  }}
+                  className="rounded-full border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <ol className="flex flex-col gap-3">
@@ -161,40 +272,49 @@ export function TeamChat({
               const mine = m.author_id === meId;
               const author = mine ? "You" : (names.get(m.author_id) ?? "Former member");
               const prev = messages[idx - 1];
+              const newDay = !prev || dayLabel(prev.created_at) !== dayLabel(m.created_at);
               // Consecutive messages from the same person within 5 minutes share one header.
               const grouped =
-                !!prev && prev.author_id === m.author_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
+                !newDay && !!prev && prev.author_id === m.author_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
               return (
+                <Fragment key={m.id}>
+                {newDay && (
+                  <li role="separator" className="my-1 flex items-center gap-3 text-xs text-muted-foreground" data-testid="chat-day">
+                    <span className="h-px flex-1 bg-border" aria-hidden />
+                    {dayLabel(m.created_at)}
+                    <span className="h-px flex-1 bg-border" aria-hidden />
+                  </li>
+                )}
                 <li
-                  key={m.id}
                   className={cn("flex gap-2", mine ? "flex-row-reverse" : "flex-row", grouped && "-mt-2")}
                   data-testid="chat-message"
                   data-mine={mine}
                 >
                   {!mine && (grouped ? <span className="w-7 shrink-0" aria-hidden /> : <PersonAvatar name={names.get(m.author_id)} size="sm" className="mt-4" />)}
-                  <div className={cn("flex min-w-0 max-w-[85%] flex-col", mine ? "items-end" : "items-start")}>
+                  <div className={cn("flex min-w-0 max-w-[80%] flex-col sm:max-w-[70%]", mine ? "items-end" : "items-start")}>
                     <span className={cn("mb-0.5 text-xs text-muted-foreground", grouped && "sr-only")}>
                       <span className="font-medium text-foreground" data-testid="chat-author">{author}</span>
                       {" · "}
-                      <time dateTime={m.created_at}>{timeFmt.format(new Date(m.created_at))}</time>
+                      <time dateTime={m.created_at}>{clockFmt.format(new Date(m.created_at))}</time>
                     </span>
                     <p
                       data-testid="chat-body"
                       title={timeFmt.format(new Date(m.created_at))}
                       className={cn(
                         "whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm [overflow-wrap:anywhere]",
-                        mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted",
+                        mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md border bg-card shadow-xs",
                       )}
                     >
                       {m.body}
                     </p>
                   </div>
                 </li>
+                </Fragment>
               );
             })}
             {pending.map((p) => (
               <li key={p.client_id} className="flex flex-col items-end" data-testid="chat-pending" data-state={p.state}>
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary/60 px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
+                <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary/60 sm:max-w-[70%] px-3 py-2 text-sm text-primary-foreground [overflow-wrap:anywhere]">{p.body}</p>
                 {p.state === "sending" ? (
                   <span className="mt-0.5 text-xs text-muted-foreground">Sending…</span>
                 ) : (
@@ -211,9 +331,20 @@ export function TeamChat({
         )}
       </div>
 
+      {unseen > 0 && (
+        <button
+          type="button"
+          onClick={scrollToEnd}
+          className="absolute bottom-20 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
+          data-testid="chat-jump"
+        >
+          <ArrowDown className="size-3.5" aria-hidden /> {unseen} new message{unseen === 1 ? "" : "s"}
+        </button>
+      )}
+
       <form
         data-toast-avoid
-        className="flex items-end gap-2 border-t p-3"
+        className="flex items-end gap-2 border-t bg-card p-3"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -222,6 +353,7 @@ export function TeamChat({
         <div className="flex-1">
           <label htmlFor="chat-input" className="sr-only">Message</label>
           <Textarea
+            ref={inputRef}
             id="chat-input"
             data-testid="chat-input"
             rows={1}
@@ -236,15 +368,23 @@ export function TeamChat({
             }}
             placeholder="Message your team…"
             aria-describedby="chat-hint"
-            className="max-h-40"
+            className="max-h-40 min-h-10 rounded-2xl px-4 py-2.5"
           />
           <p id="chat-hint" className="sr-only">Enter sends. Shift+Enter adds a new line.</p>
           {draft.length > MAX - 200 && <p className="mt-1 text-right text-xs text-muted-foreground">{draft.length}/{MAX}</p>}
         </div>
-        <Button type="submit" disabled={!draft.trim()} aria-label="Send message">
+        <Button type="submit" size="icon-lg" className="rounded-full" disabled={!draft.trim()} aria-label="Send message">
           <Send aria-hidden />
         </Button>
       </form>
     </section>
   );
+}
+
+/** "Kai", "Kai and Maya", "Kai, Maya and Priya", "Kai, Maya and 3 others". */
+function listNames(names: string[]) {
+  const first = names.map((n) => n.split(" ")[0]);
+  if (first.length <= 1) return first.join("");
+  if (first.length <= 3) return `${first.slice(0, -1).join(", ")} and ${first.at(-1)}`;
+  return `${first.slice(0, 2).join(", ")} and ${first.length - 2} others`;
 }

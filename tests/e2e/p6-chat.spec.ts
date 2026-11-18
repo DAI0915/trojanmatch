@@ -91,7 +91,7 @@ test.describe("P6 realtime team chat", () => {
     await expect(member).toHaveURL(new RegExp(`${workspace}$`));
     await owner.goto(workspace);
     await expect(owner.getByTestId("workspace-title")).toHaveText(teamName);
-    if (mobile) await owner.getByRole("tab", { name: "Team" }).click();
+    if (mobile) await owner.getByRole("tab", { name: "Team details" }).click();
     await expect(owner.getByTestId("workspace-members")).toContainText("Dev Tester A");
     await expect(owner.getByTestId("workspace-members")).toContainText("Dev Tester B");
     await openChat(owner, mobile);
@@ -143,7 +143,7 @@ test.describe("P6 realtime team chat", () => {
     await member.screenshot({ path: shot("chat"), fullPage: true });
 
     // Kickoff panel works for members (Gemini if configured, otherwise the labeled template).
-    if (mobile) await owner.getByRole("tab", { name: "AI Kickoff" }).click();
+    await owner.getByRole("tab", { name: "AI Kickoff" }).click();
     await owner.getByRole("button", { name: "Generate kickoff" }).click();
     await expect(owner.getByTestId("kickoff-content")).toBeVisible({ timeout: 40_000 });
     await expect(owner.getByTestId("kickoff-roles")).toContainText("Dev Tester A");
